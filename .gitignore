@@ -32,3 +32,8 @@ Thumbs.db
 settings.json
 chat_images/
 model_eval/
+
+wakeword/my_room_noise/
+wakeword/my_room_noise.zip
+wakeword/verifier_clips/
+wakeword/hey_loki_verifier.pkl

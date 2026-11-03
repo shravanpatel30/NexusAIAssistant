@@ -27,6 +27,15 @@ _whisper = None
 _piper = None
 _load_lock = threading.Lock()
 
+# True while Loki is talking or F9 is held, so the wake-word listener
+# ignores the mic (Loki saying "Loki" mustn't wake itself up)
+_speaking = threading.Event()
+_recording = threading.Event()
+
+
+def is_busy():
+    return _speaking.is_set() or _recording.is_set()
+
 
 def _get_whisper():
     global _whisper
@@ -65,6 +74,7 @@ class Recorder:
     def start(self):
         self.frames = []
         self.recording = True
+        _recording.set()
 
         def callback(indata, frame_count, time_info, status):
             if self.recording:
@@ -78,6 +88,7 @@ class Recorder:
 
     def stop(self):
         self.recording = False
+        _recording.clear()
         if self.stream:
             self.stream.stop()
             self.stream.close()
@@ -98,6 +109,7 @@ def speak(text):
     """Play text aloud through default audio output."""
     if not text or not text.strip():
         return
+    _speaking.set()
     try:
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as wav:
@@ -113,3 +125,5 @@ def speak(text):
         sd.wait()
     except Exception as e:
         print(f"(speak failed: {e})")
+    finally:
+        _speaking.clear()

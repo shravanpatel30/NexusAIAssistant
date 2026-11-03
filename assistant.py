@@ -49,6 +49,7 @@ import symbolic_math
 import system_info
 import tray as tray_module
 import voice
+import wakeword
 
 if sys.platform == "win32":
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Loki.LocalAssistant.1.0")
@@ -945,15 +946,18 @@ def dispatch(user_text, stream=False, images=None, on_status=None):
 # Utility commands (handled before dispatch, no LLM)
 # ============================================================================
 UTILITY_COMMANDS = {
-    "exit":        {"exit", "quit", "bye", "goodbye", "stop", "shut down",
+    "exit":        {"exit", "quit", "bye", "goodbye", "shut down",
                     "shutdown", "end", "close assistant"},
-    "voice_off":   {"voice off", "stop talking", "be quiet", "shush", "mute", "silence"},
+    # "stop" means "stop talking", not "quit" — easy to say to a wake word
+    "voice_off":   {"voice off", "stop", "stop talking", "be quiet", "shush", "mute", "silence"},
     "voice_on":    {"voice on", "speak again", "unmute", "talk to me"},
     "reset":       {"reset", "clear", "new chat", "clear chat",
                     "forget everything", "start over"},
     "clear_fired": {"clear fired", "clear history", "clean up"},
     "think_on":    {"think on", "thinking on", "thinking mode on", "reasoning on"},
     "think_off":   {"think off", "thinking off", "thinking mode off", "reasoning off"},
+    "wake_on":     {"wake word on", "start listening", "listen for wake word"},
+    "wake_off":    {"wake word off", "stop listening"},
 }
 
 
@@ -982,6 +986,8 @@ def run_utility(cmd):
         return Reply(clear_fired_reminders())
     if cmd in ("think_on", "think_off"):
         return Reply(set_thinking(cmd == "think_on"))
+    if cmd in ("wake_on", "wake_off"):
+        return Reply(set_wake_word(cmd == "wake_on"))
     return Reply(f"Unknown command '{cmd}'.")
 
 
@@ -994,6 +1000,56 @@ def set_thinking(on):
         return ("Thinking mode on — chat and PDF answers will reason first "
                 "(slower). Reminders, calculus, etc. are unaffected.")
     return "Thinking mode off."
+
+
+# ============================================================================
+# Wake word ("Hey Loki") — see wakeword.py
+# ============================================================================
+_wake_listener = None        # created by the voice/tray front ends
+_wake_handler = None         # what to do with a spoken command (set by the front end)
+_wake_on_wake = None         # what to show when the wake word is heard
+
+
+def _on_wake_command(audio):
+    """Called on the listener thread with what you said after "Hey Loki"."""
+    text = wakeword.strip_wake_phrase(voice.transcribe(audio)) if audio is not None else ""
+    print(f"[WAKE] you said: {text!r}", flush=True)
+    if _wake_handler:
+        _wake_handler(text)
+
+
+def start_wake_word(on_wake=None):
+    """Start listening if the setting is on. Returns a status message or ""."""
+    global _wake_listener, _wake_on_wake
+    if on_wake:
+        _wake_on_wake = on_wake
+    if not models.get_setting("wake_word"):
+        return ""
+    if _wake_listener is None:
+        _wake_listener = wakeword.WakeWordListener(
+            _on_wake_command, on_wake=lambda: _wake_on_wake and _wake_on_wake(),
+            is_busy=voice.is_busy)
+    if not _wake_listener.start():
+        return (f"Wake word unavailable ({_wake_listener.error}). F9 still works. "
+                f"See the README's Wake word section.")
+    return f"Say “{wakeword.model_description()}” or hold F9 to talk."
+
+
+def set_wake_word(on):
+    """Turn "Hey Loki" listening on/off (remembered in settings.json)."""
+    models.set_setting("wake_word", bool(on))
+    if not on:
+        if _wake_listener and _wake_listener.running:
+            _wake_listener.stop()
+        return "Wake word off — the mic is only used while you hold F9."
+    if _wake_handler is None:          # text mode: nothing is listening
+        return "Wake word on. It works in voice and tray modes."
+    return start_wake_word() or "Wake word on."
+
+
+def stop_wake_word():
+    if _wake_listener and _wake_listener.running:
+        _wake_listener.stop()
 
 
 def _error_reply(e):
@@ -1054,15 +1110,32 @@ def handle_voice(user_text):
 
 
 def voice_mode():
-    """Push-to-talk: hold the hotkey to record, release to transcribe and run."""
+    """Push-to-talk: hold the hotkey to record, release to transcribe and run.
+    "Hey Loki" works too, if the wake word is on."""
+    global _wake_handler
     reminders.start()
     voice.preload()
     recorder = voice.Recorder()
     print(f"\nVoice mode: hold {VOICE_HOTKEY.upper()} to talk. Release to send.")
     print("Say 'voice off' to disable speech output.\n")
 
+    quit_requested = threading.Event()
+
+    def on_wake_text(text):
+        print(f"\r🎙  you said: {text}" + " " * 20 if text else "\r(didn't catch that)")
+        if text:
+            try:
+                handle_voice(text)
+            except KeyboardInterrupt:          # "exit" said after the wake word
+                quit_requested.set()
+
+    _wake_handler = on_wake_text
+    status = start_wake_word(on_wake=lambda: print("🎙  listening...", end="", flush=True))
+    if status:
+        print(status + "\n")
+
     is_recording = False
-    while True:
+    while not quit_requested.is_set():
         try:
             if keyboard.is_pressed(VOICE_HOTKEY):
                 if not is_recording:
@@ -1083,6 +1156,7 @@ def voice_mode():
             time.sleep(0.05)
         except KeyboardInterrupt:
             break
+    stop_wake_word()
 
 
 # ============================================================================
@@ -1124,6 +1198,9 @@ def handle_window(user_text, images=None):
         name = pdf_handler.get_info()["filename"] if pdf_handler.is_attached() else ""
         bridge.pdf_attached.emit(name)
 
+    if VOICE_OUTPUT and reply.spoken:
+        voice.speak(reply.spoken)
+
 
 def _voice_loop_for_tray(running):
     """F9 push-to-talk while in tray mode; results go to the chat window."""
@@ -1157,9 +1234,6 @@ def _voice_loop_for_tray(running):
 def tray_mode():
     global _window_bridge
     acquire_lock()
-
-    # Load the voice models in the background so the window appears right away
-    threading.Thread(target=voice.preload, daemon=True).start()
 
     qt_app = QApplication.instance() or QApplication([])
     qt_app.setQuitOnLastWindowClosed(False)
@@ -1236,19 +1310,46 @@ def tray_mode():
         global VOICE_OUTPUT
         VOICE_OUTPUT = not VOICE_OUTPUT
 
+    def wake_toggle_cb():
+        bridge.system_message.emit(set_wake_word(not models.get_setting("wake_word")))
+
     tray = tray_module.TrayApp(
         on_quit=quit_cb,
         on_voice_toggle=voice_toggle_cb,
         get_voice_status=lambda: VOICE_OUTPUT,
         on_open_chat=bridge.show_window_requested.emit,
+        on_wake_toggle=wake_toggle_cb,
+        get_wake_status=lambda: bool(_wake_listener and _wake_listener.running),
     )
     tray.run_in_thread()
 
     voice_thread = threading.Thread(target=_voice_loop_for_tray, args=(running,), daemon=True)
     voice_thread.start()
 
+    # "Hey Loki": what you say after the wake word goes to the window like F9
+    global _wake_handler
+
+    def on_wake_text(text):
+        if not text:
+            bridge.system_message.emit("(Didn't catch that.)")
+            return
+        bridge.user_said.emit(text, [])
+        handle_window(text)
+
+    _wake_handler = on_wake_text
+
+    # Load the voice models and start the wake word in the background, so
+    # the window appears right away
+    def start_voice():
+        voice.preload()
+        status = start_wake_word(on_wake=lambda: bridge.system_message.emit("🎙 Listening..."))
+        if status and ("unavailable" in status or "placeholder" in status):
+            bridge.system_message.emit(status)
+    threading.Thread(target=start_voice, daemon=True).start()
+
     qt_app.exec()          # blocks until quit
     running["alive"] = False
+    stop_wake_word()
     voice_thread.join(timeout=1.0)
     tray.stop()            # remove the icon (also needed when quitting via "exit")
 

@@ -8,7 +8,7 @@ Loki is a desktop AI assistant that runs entirely on your own machine. No cloud 
 - Answer questions about your computer's status (CPU, RAM, disk, battery, uptime, local IP)
 - Evaluate arithmetic expressions instantly and locally
 - Answer general questions and help with coding via a local LLM
-- Listen to push-to-talk voice commands and speak responses
+- Listen to voice commands — say "Hey Loki" or hold F9 — and speak responses
 - Live quietly in your system tray, available whenever you press the hotkey
 - Read PDFs and answer questions about them, with local semantic search (RAG)
 - Convert text and equations to LaTeX
@@ -145,6 +145,17 @@ For best performance, set these in your Windows environment variables (System Pr
 
 Restart any terminal after setting these.
 
+### 8. Wake word (optional)
+
+To talk to Loki hands-free by saying "Hey Loki", install openWakeWord and download its base models once:
+
+```bash
+pip install openwakeword
+python wakeword_tools.py setup
+```
+
+Until you train your own "Hey Loki" model (see **Training the "Hey Loki" wake word** below), Loki answers to **"Hey Jarvis"**, one of openWakeWord's ready-made phrases, so you can try everything out first. Without openWakeWord, F9 works as usual.
+
 ---
 
 ## Running Loki
@@ -165,7 +176,7 @@ Opens a REPL in your terminal. Type commands, see responses inline. Best for ver
 python assistant.py --voice
 ```
 
-Hold **F9** to speak, release to send. Replies print in the terminal; say "voice on" to also have them spoken aloud through your default audio device. Say "exit" or press `Ctrl+C` to quit.
+Hold **F9** to speak, release to send — or say "Hey Loki" and then your command. Replies print in the terminal; say "voice on" to also have them spoken aloud through your default audio device. Say "exit" or press `Ctrl+C` to quit.
 
 ### Tray mode (recommended for daily use)
 
@@ -173,7 +184,7 @@ Hold **F9** to speak, release to send. Replies print in the terminal; say "voice
 python assistant.py --tray
 ```
 
-Loki runs silently in your system tray. Left-click the tray icon to open the chat window. F9 still works for push-to-talk from anywhere. Right-click the tray icon and choose Quit (or type `exit` in the chat window) to exit cleanly.
+Loki runs silently in your system tray. Left-click the tray icon to open the chat window. Say "Hey Loki", or hold F9, to talk to it from anywhere. Right-click the tray icon and choose Quit (or type `exit` in the chat window) to exit cleanly.
 
 The voice models load in the background at startup, so the window is usable right away — the very first F9 press may take a few extra seconds if they haven't finished loading.
 
@@ -204,7 +215,7 @@ Log out and back in to verify it launches.
 
 ### Voice commands
 
-Press and hold **F9**, speak, release. Examples:
+Say **"Hey Loki"**, wait for the short chime, then say your command — or press and hold **F9**, speak, release. Examples:
 
 - "Open Spotify"
 - "Go to youtube.com on Chrome"
@@ -215,6 +226,14 @@ Press and hold **F9**, speak, release. Examples:
 - "Cancel reminders 4, 5, and 6"
 - "What's the speed of light?"
 - "Write a Python function to reverse a string"
+
+### Wake word ("Hey Loki")
+
+- **How it works:** after the chime, just talk. Loki records until you stop for about a second, then transcribes and runs it. If you don't say anything within 5 seconds, it shows "(Didn't catch that.)". "Hey Loki, open Spotify" in one breath works too.
+- **Spoken replies:** say "voice on" to have Loki answer out loud. While Loki is talking (and while you hold F9), it ignores the wake word, so it can't wake itself up.
+- **On/off:** say or type `wake word off` / `wake word on`, or use **Wake word** in the tray menu. The choice is saved in `settings.json`. With it off, the microphone is only used while you hold F9.
+- **Everything stays on your PC.** The wake-word model listens locally and nothing is recorded or saved — only what you say *after* the wake word is transcribed, the same as F9.
+- **CPU use** is a few percent of one core.
 
 ### Text commands
 
@@ -227,12 +246,14 @@ These work in any mode and don't go through the LLM:
 | Command | What it does |
 |---|---|
 | `exit`, `quit`, `bye`, `goodbye` | Stop the assistant |
-| `voice off`, `stop talking`, `be quiet` | Disable spoken replies |
+| `voice off`, `stop`, `stop talking`, `be quiet` | Disable spoken replies |
 | `voice on`, `speak again` | Re-enable spoken replies |
 | `reset`, `clear`, `new chat` | Forget the current conversation |
 | `clear fired`, `clean up` | Remove one-off reminders that have already fired |
 | `think on`, `thinking on` | Turn on thinking mode (see below) |
 | `think off`, `thinking off` | Turn off thinking mode |
+| `wake word on`, `start listening` | Listen for "Hey Loki" |
+| `wake word off`, `stop listening` | Stop listening (F9 still works) |
 
 ### Thinking mode
 
@@ -399,6 +420,146 @@ Your choice is saved in `settings.json` and kept across restarts. To try a new m
 
 ---
 
+## Training the "Hey Loki" wake word
+
+openWakeWord has no ready-made "Hey Loki", so you train one, once. Training runs in Google Colab on Google's GPU, using tens of thousands of synthetic voices saying "hey loki" mixed with noise and room echo. All that comes back to your PC is a ~1 MB file, `hey_loki.onnx`; after that everything is offline.
+
+These settings aim for a robust model rather than a quick one. Expect **roughly 3–5 hours** on Colab's free T4 GPU, or about half that on an L4 with Colab Pro. Free Colab can disconnect a long run if the tab sits idle, so keep the tab in front, or use Pro for a month for this.
+
+### 1. Record your room (recommended)
+
+```bash
+python wakeword_tools.py noise 20
+```
+
+Records 20 minutes of your room's usual sound in 10-second clips — leave on the fan, music, keyboard typing, a video call, whatever you normally have going (just don't say "hey loki"). Training mixes these under the "hey loki" clips, so the model learns to ignore exactly the noise it will hear at your desk. Output: `wakeword/my_room_noise.zip`.
+
+### 2. Open the training notebook
+
+The official openWakeWord notebook no longer runs on current Colab. Use the fixed version from [openWakeWord pull request #359](https://github.com/dscripka/openWakeWord/pull/359) (open, not yet merged as of November 2026):
+
+**[Open in Colab](https://colab.research.google.com/github/Oreozisbored/openWakeWord/blob/modernize-training-notebook/notebooks/automatic_model_training.ipynb)**
+
+Then **Runtime → Change runtime type → T4 GPU** (or L4 with Pro).
+
+### 3. Run sections 1–4
+
+Setup, hardware check, model downloads, and about 16 GB of training data. Takes 15–30 minutes.
+
+### 4. Add your room noise and music
+
+Click **+ Code** under section 4, paste this, run it, and pick `my_room_noise.zip` when it asks:
+
+```python
+# Extra background audio: your own room + some music
+import os, zipfile
+from google.colab import files
+
+os.makedirs("/content/my_room_noise", exist_ok=True)
+for name in files.upload():
+    zipfile.ZipFile(name).extractall("/content/my_room_noise")
+print(len(os.listdir("/content/my_room_noise")), "room clips")
+
+music = """
+import os, soundfile as sf
+from datasets import load_dataset, Audio
+os.makedirs("/content/fma", exist_ok=True)
+ds = load_dataset("rudraml/fma", name="small", split="train", streaming=True)
+ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+for i, row in enumerate(ds):
+    if i >= 240: break                          # 240 x 30 s = 2 hours of music
+    sf.write(f"/content/fma/{i}.wav", row["audio"]["array"], 16000, subtype="PCM_16")
+"""
+open("/content/dl_music.py", "w").write(music)
+!/content/py311/bin/python /content/dl_music.py
+print(len(os.listdir("/content/fma")), "music clips")
+```
+
+If the music download errors, skip it — the notebook's own noise clips plus your room still cover most of what matters.
+
+### 5. Configure (section 5)
+
+Set the form fields, then run the cell:
+
+| Field | Value |
+|---|---|
+| `target_wake_word` | `hey loki` |
+| `number_of_examples` | `50000` (the maximum) |
+| `number_of_training_steps` | `50000` (the maximum) |
+| `false_activation_penalty` | `2000` |
+
+Then click **+ Code** under it and run this, which turns on the extra robustness settings the form doesn't show:
+
+```python
+import os, yaml
+cfg_path = f"/content/{model_clean_name}.yaml"
+cfg = yaml.safe_load(open(cfg_path))
+
+cfg["augmentation_rounds"] = 2       # each clip reused with fresh noise/echo: more variety
+
+# Sound-alikes that must NOT wake Loki (repeated so they get real weight).
+# Don't add "hey lowkey": it sounds identical to "hey loki" and would confuse the model.
+sound_alikes = ["hey lucky", "hey rocky", "hey locky", "hey luke", "hey lucy", "hey lori",
+                "hey look", "hey hockey", "hey mickey", "hey okay", "lucky", "low key",
+                "hockey", "jockey", "local", "hello"]
+cfg["custom_negative_phrases"] = sound_alikes * 100
+
+bg, rate = ["/content/background_clips"], [1]
+for folder, r in (("/content/fma", 1), ("/content/my_room_noise", 3)):   # your room counts 3x
+    if os.path.isdir(folder) and os.listdir(folder):
+        bg.append(folder); rate.append(r)
+cfg["background_paths"], cfg["background_paths_duplication_rate"] = bg, rate
+
+yaml.safe_dump(cfg, open(cfg_path, "w"))
+print("background:", bg, "| rounds:", cfg["augmentation_rounds"])
+```
+
+### 6. Check the pronunciation (section 6)
+
+Listen to the samples. If the voices don't say "Loki" the way you do, change `target_wake_word` to a phonetic spelling (for example `hey lowkee`), re-run section 5 and the cell after it, and listen again. The file will then be named after that spelling — rename it to `hey_loki.onnx` at the end.
+
+### 7. Train (section 7)
+
+This is the long part: generating 100,000 synthetic clips, adding noise and echo to them, then training. Keep the tab open. If Colab disconnects, reconnect and re-run sections 1–5 and your two extra cells; clip generation picks up where it left off as long as the runtime wasn't reset.
+
+Skip section 8 (TFLite) — Loki uses the ONNX file.
+
+### 8. Bring the model home
+
+In Colab's **Files** panel (folder icon on the left), open `model_hey_loki`, right-click `hey_loki.onnx` → **Download**. Put it in Loki's `wakeword/` folder and restart Loki. The startup message about "Hey Jarvis" goes away.
+
+Check it with the live meter:
+
+```bash
+python wakeword_tools.py test
+```
+
+Say "hey loki" from your desk, from across the room, with music on. Then talk normally, say "lucky", "Loki" on its own, "low key" — those should stay low. Saying just "Loki" without "hey" doesn't wake it, by design (the training treats partial phrases as non-matches), which avoids false wake-ups from TV and conversation.
+
+### 9. Teach it your voice (optional)
+
+```bash
+python wakeword_tools.py verifier
+```
+
+Takes 2 minutes: you say "hey loki" 6 times and read 3 sentences. It trains a small extra check (`wakeword/hey_loki_verifier.pkl`) that only lets wake-ups through when it's **your** voice — the most effective way to stop false wake-ups from TV, YouTube and other people. The trade-off: Loki won't answer anyone else. Delete the file to undo.
+
+### Tuning
+
+At the top of `wakeword.py`:
+
+| Setting | Default | Change it when |
+|---|---|---|
+| `THRESHOLD` | `0.5` | Raise to `0.6`–`0.7` if it wakes up when it shouldn't; lower to `0.4` if it misses you |
+| `PATIENCE` | `2` | Raise to `3` for fewer random wake-ups (needs a slightly longer, clearer "hey loki") |
+| `VAD_THRESHOLD` | `0.5` | Only wake up while someone is actually speaking. Keep it on |
+| `END_SILENCE` | `0.9` s | Raise if Loki cuts you off mid-sentence when you pause to think |
+| `MIC_DEVICE` | `None` | Set to a microphone's name or number if the default isn't the one you talk into |
+
+The live meter (`wakeword_tools.py test`) shows your scores, so you can see where to set `THRESHOLD`.
+
+---
+
 ## Project structure
 
 ```text
@@ -407,6 +568,8 @@ LokiAIAssistant/
 ├── chat_window.py          # PySide6 chat window, reminder popup
 ├── tray.py                 # System tray icon
 ├── voice.py                # Whisper (STT) and Piper (TTS)
+├── wakeword.py             # "Hey Loki" listener (openWakeWord)
+├── wakeword_tools.py       # Wake word setup, live test meter, room-noise recorder, voice verifier
 ├── db.py                   # SQLite for reminders
 ├── reminders.py            # Reminder scheduler (fires the popup via assistant.py)
 ├── pdf_handler.py          # PDF text extraction and attachment state
@@ -431,6 +594,7 @@ LokiAIAssistant/
 ├── chat_images/            # Copies of images you've attached (auto-created)
 ├── AI_Icon.png             # Tray and window icon
 ├── voices/                 # Piper voice files (you download these)
+├── wakeword/               # hey_loki.onnx (you train it), your voice verifier, room noise
 ├── logs/                   # Daily log files in tray mode (auto-created)
 ├── .gitattributes          # Line-ending rules (keeps web/vendor/ byte-exact)
 └── requirements.txt
@@ -537,6 +701,14 @@ Usually Ollama isn't running. Start it (open the Ollama app, or run `ollama serv
 
 Loki uses `dateparser` for natural-language times. It handles most phrasings but occasionally trips on unusual ones. Try rephrasing: "in 30 minutes" instead of "in a half hour"; "tomorrow at 5pm" instead of "five tomorrow."
 
+### "Wake word unavailable" at startup
+
+openWakeWord or its base models are missing. Run `pip install openwakeword` and `python wakeword_tools.py setup`, then restart Loki. If the message mentions an audio device, check that Windows has a default microphone (Settings → System → Sound → Input), or set `MIC_DEVICE` in `wakeword.py`.
+
+### "Hey Loki" doesn't respond, or wakes up on its own
+
+Run `python wakeword_tools.py test` and watch the scores. If your "hey loki" peaks below the threshold, lower `THRESHOLD` (or move the mic closer); if other sounds cross it, raise `THRESHOLD` or `PATIENCE`, record more room noise and retrain, or train the voice verifier. See **Tuning** in the wake word training section.
+
 ### Voice transcription is inaccurate
 
 Edit `voice.py` and change `WHISPER_MODEL_SIZE = "small.en"` to `"medium.en"`. Larger model, more accurate, slower.
@@ -591,6 +763,7 @@ Everything runs locally:
 - Reminders are stored in a local SQLite file
 - Conversation history is in a local file
 - Images you attach are read by the local vision model; copies are kept in `chat_images/` so the chat history can show them. Delete that folder any time.
+- With the wake word on, the microphone is open all the time, but the audio is only scored locally for "Hey Loki" and thrown away — nothing is recorded or saved until after the wake word. Say `wake word off` to close the mic except while you hold F9.
 
 The only network connections Loki makes are:
 - To `127.0.0.1:11434` (Ollama, on your own machine) — never leaves your machine
@@ -626,3 +799,4 @@ Loki is built on top of excellent open-source projects:
 - [marked](https://marked.js.org) for markdown rendering
 - [SymPy](https://www.sympy.org) for symbolic calculus
 - [pdfplumber](https://github.com/jsvine/pdfplumber) for PDF text extraction
+- [openWakeWord](https://github.com/dscripka/openWakeWord) for the "Hey Loki" wake word, with Silero VAD

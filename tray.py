@@ -9,30 +9,41 @@ ICON_FILE = Path(__file__).parent / "AI_Icon.png"
 
 
 class TrayApp:
-    def __init__(self, on_quit, on_voice_toggle, get_voice_status, on_open_chat):
+    def __init__(self, on_quit, on_voice_toggle, get_voice_status, on_open_chat,
+                 on_wake_toggle=None, get_wake_status=None):
         self.on_quit = on_quit
         self.on_voice_toggle = on_voice_toggle
         self.get_voice_status = get_voice_status
         self.on_open_chat = on_open_chat
+        self.on_wake_toggle = on_wake_toggle
+        self.get_wake_status = get_wake_status
         self.icon = None
         self.thread = None
 
     def _build_menu(self):
-        return pystray.Menu(
+        items = [
             pystray.MenuItem("Open chat", self._open_chat, default=True),
             pystray.MenuItem(
                 lambda item: f"Voice output: {'ON' if self.get_voice_status() else 'OFF'}",
                 self._toggle_voice,
             ),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit", self._quit),
-        )
+        ]
+        if self.on_wake_toggle:
+            items.append(pystray.MenuItem(
+                lambda item: f"Wake word: {'ON' if self.get_wake_status() else 'OFF'}",
+                self._toggle_wake,
+            ))
+        return pystray.Menu(*items, pystray.Menu.SEPARATOR, pystray.MenuItem("Quit", self._quit))
 
     def _open_chat(self, icon, item):
         self.on_open_chat()
 
     def _toggle_voice(self, icon, item):
         self.on_voice_toggle()
+        icon.update_menu()
+
+    def _toggle_wake(self, icon, item):
+        self.on_wake_toggle()
         icon.update_menu()
 
     def _quit(self, icon, item):

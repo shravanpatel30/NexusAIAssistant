@@ -8,6 +8,7 @@ Two roles:
 Both are picked from dropdowns in the chat window. settings.json is created
 the first time you change one; until then the DEFAULTS below are used.
 Anything you `ollama pull` shows up in the dropdowns.
+settings.json also remembers whether the "Hey Loki" wake word is on.
 """
 import json
 import threading
@@ -21,6 +22,7 @@ SETTINGS_FILE = Path(__file__).parent / "settings.json"
 DEFAULTS = {
     "main_model": "qwen3:8b",
     "vision_model": "qwen3-vl:8b-instruct",
+    "wake_word": True,          # listen for "Hey Loki" (say "wake word off" to stop)
 }
 
 _lock = threading.Lock()
