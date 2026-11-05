@@ -295,21 +295,24 @@ class ModelCombo(QComboBox):
         super().showPopup()
 
     def refresh(self):
+        """Fill the list from Ollama. Returns False if Ollama isn't answering yet."""
         current = models.get_setting(f"{self.role}_model")
         names = models.installed()
+        up = bool(names) or models.is_running()
         if current not in names and not any(models.same_model(current, n) for n in names):
             names = [current] + names        # keep the saved choice even if Ollama is down
         self.blockSignals(True)
         self.clear()
         for name in names:
             label = name + ("  👁" if models.can_see(name) else "")
-            if not models.capabilities(name):
-                label += "  (not found)"
+            if up and not models.capabilities(name):
+                label += "  (not found)"     # Ollama is up but doesn't have this model
             self.addItem(label, name)
         for i in range(self.count()):
             if models.same_model(self.itemData(i), current):
                 self.setCurrentIndex(i)
         self.blockSignals(False)
+        return up
 
 
 # ---------------------------------------------------------------------------
@@ -528,10 +531,13 @@ class ChatWindow(QMainWindow):
         self.hide()
 
     # ---- Models ----
-    def _refresh_models(self):
-        for combo in self.model_combos.values():
-            combo.refresh()
+    def _refresh_models(self, attempt=0):
+        up = all([combo.refresh() for combo in self.model_combos.values()])
         self._update_think_button()
+        # Right after the PC boots, Loki can start before Ollama does: check
+        # again every 3 s (for up to 3 minutes) so 👁 and Think show up on their own
+        if not up and attempt < 60:
+            QTimer.singleShot(3000, lambda: self._refresh_models(attempt + 1))
 
     def _on_model_changed(self, combo):
         name = combo.currentData()

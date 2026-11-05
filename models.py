@@ -84,6 +84,14 @@ def installed():
     return sorted(names)
 
 
+def is_running():
+    """True if Ollama answers (it can take a while to start after the PC boots)."""
+    try:
+        return requests.get(f"{OLLAMA}/api/tags", timeout=2).ok
+    except Exception:
+        return False
+
+
 def capabilities(model):
     """Set of capabilities Ollama reports, e.g. {"completion", "vision", "thinking"}."""
     if model in _caps_cache:

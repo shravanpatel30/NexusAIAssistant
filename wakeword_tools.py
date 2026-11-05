@@ -54,29 +54,48 @@ def setup():
 
 # ---------------------------------------------------------------- test
 def test():
-    """Print the wake-word score live. Say the phrase from different spots in
-    the room, with music or a fan on, and see where the score lands."""
+    """Print the wake-word score live, scored exactly the way Loki does. Say
+    the phrase from different spots in the room, with music or a fan on, and
+    see where the score lands. Follows Windows' default mic if you unplug one."""
+    import collections
     import sounddevice as sd
-    model, name = wakeword._load_model()
-    print(f"Listening for '{name}' (threshold {wakeword.THRESHOLD}, "
-          f"{wakeword.PATIENCE} frames in a row). Ctrl+C to stop.\n")
+    scorer = wakeword.WakeScorer()
+    print(f"Listening for '{scorer.name}' (threshold {wakeword.THRESHOLD}, "
+          f"{wakeword.PATIENCE} frames in a row). Ctrl+C to stop.")
+    print("score = wake word | mic = loudest in the last 1.5 s (talking: about -35 dB or louder) | "
+          "voice = voice check, best in the last 1.5 s (needs {:.1f}+)\n".format(wakeword.VAD_THRESHOLD))
     above, peak, peak_at = 0, 0.0, 0.0
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
-                        blocksize=wakeword.FRAME, device=wakeword.MIC_DEVICE) as stream:
-        try:
-            while True:
-                frame, _ = stream.read(wakeword.FRAME)
-                score = float(model.predict(frame[:, 0])[name])
-                above = above + 1 if score >= wakeword.THRESHOLD else 0
-                if score > peak or time.time() - peak_at > 3:
-                    peak, peak_at = score, time.time()
-                bar = "█" * int(score * 40)
-                woke = "  ← WAKE" if above == wakeword.PATIENCE else ""
-                print(f"\r{score:5.2f} {bar:<40} peak {peak:4.2f}{woke}   ", end="", flush=True)
-                if woke:
-                    print()
-        except KeyboardInterrupt:
-            print()
+    levels, voices = collections.deque(maxlen=19), collections.deque(maxlen=19)
+    try:
+        while True:                                  # reopen if the mic goes away
+            try:
+                with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+                                    blocksize=wakeword.FRAME, device=wakeword.MIC_DEVICE) as stream:
+                    try:
+                        print("Microphone:", sd.query_devices(stream.device, "input")["name"], "\n")
+                    except Exception:
+                        pass
+                    scorer.reset()
+                    while True:
+                        frame, _ = stream.read(wakeword.FRAME)
+                        frame = frame[:, 0]
+                        score, _, speech = scorer(frame)
+                        levels.append(wakeword.level_db(frame))
+                        voices.append(speech)
+                        above = above + 1 if score >= wakeword.THRESHOLD else 0
+                        if score > peak or time.time() - peak_at > 3:
+                            peak, peak_at = score, time.time()
+                        bar = "█" * int(score * 30)
+                        woke = "  ← WAKE" if above == wakeword.PATIENCE else ""
+                        print(f"\r{score:4.2f} {bar:<30} peak {peak:4.2f} | mic {max(levels):4.0f} dB "
+                              f"x{scorer.gain.gain:<4.1f}| voice {max(voices):4.2f}{woke}   ", end="", flush=True)
+                        if woke:
+                            print()
+            except sd.PortAudioError as e:
+                print(f"\n\nMicrophone disconnected ({e}). Switching to Windows' default mic...")
+                time.sleep(2)
+    except KeyboardInterrupt:
+        print()
 
 
 # ---------------------------------------------------------------- noise

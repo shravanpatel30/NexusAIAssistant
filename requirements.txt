@@ -40,3 +40,6 @@ antlr4-python3-runtime==4.11
 
 # Wake word
 openwakeword
+
+# To check for mic
+pycaw

@@ -150,11 +150,13 @@ Restart any terminal after setting these.
 To talk to Loki hands-free by saying "Hey Loki", install openWakeWord and download its base models once:
 
 ```bash
-pip install openwakeword
+pip install openwakeword pycaw
 python wakeword_tools.py setup
 ```
 
-Until you train your own "Hey Loki" model (see **Training the "Hey Loki" wake word** below), Loki answers to **"Hey Jarvis"**, one of openWakeWord's ready-made phrases, so you can try everything out first. Without openWakeWord, F9 works as usual.
+`pycaw` lets Loki notice when Windows switches microphones (earphones plugged in or out) and follow along.
+
+Until you train your own "Hey Loki" model (see **Training the "Hey Loki" wake word** below, with the notebook in `wakeword/`), Loki answers to **"Hey Jarvis"**, one of openWakeWord's ready-made phrases, so you can try everything out first. Without openWakeWord, F9 works as usual.
 
 ---
 
@@ -422,9 +424,9 @@ Your choice is saved in `settings.json` and kept across restarts. To try a new m
 
 ## Training the "Hey Loki" wake word
 
-openWakeWord has no ready-made "Hey Loki", so you train one, once. Training runs in Google Colab on Google's GPU, using tens of thousands of synthetic voices saying "hey loki" mixed with noise and room echo. All that comes back to your PC is a ~1 MB file, `hey_loki.onnx`; after that everything is offline.
+openWakeWord has no ready-made "Hey Loki", so you train one, once, with the notebook `wakeword/loki_wakeword_training.ipynb`. It generates tens of thousands of synthetic voices saying your phrase, mixes them with noise, room echo and your own room's sound, and trains a small model. All that comes back is a ~200 KB file, `hey_loki.onnx`; after that everything is offline.
 
-These settings aim for a robust model rather than a quick one. Expect **roughly 3–5 hours** on Colab's free T4 GPU, or about half that on an L4 with Colab Pro. Free Colab can disconnect a long run if the tab sits idle, so keep the tab in front, or use Pro for a month for this.
+The notebook runs on **Google Colab** (free T4 GPU) or on **your own PC** with an NVIDIA GPU, through WSL2. The first run takes roughly 3–5 hours on a T4, mostly generating the clips. Retrains after that take under an hour, because the clips are reused.
 
 ### 1. Record your room (recommended)
 
@@ -432,117 +434,49 @@ These settings aim for a robust model rather than a quick one. Expect **roughly 
 python wakeword_tools.py noise 20
 ```
 
-Records 20 minutes of your room's usual sound in 10-second clips — leave on the fan, music, keyboard typing, a video call, whatever you normally have going (just don't say "hey loki"). Training mixes these under the "hey loki" clips, so the model learns to ignore exactly the noise it will hear at your desk. Output: `wakeword/my_room_noise.zip`.
+Records 20 minutes of your room's usual sound in 10-second clips — leave on the fan, music, keyboard typing, a video call, whatever you normally have going (just don't say the wake word). Training mixes these under the wake-word clips, so the model learns to ignore exactly the noise it will hear at your desk. Output: `wakeword/my_room_noise.zip`.
 
-### 2. Open the training notebook
+### 2. Run the notebook
 
-The official openWakeWord notebook no longer runs on current Colab. Use the fixed version from [openWakeWord pull request #359](https://github.com/dscripka/openWakeWord/pull/359) (open, not yet merged as of November 2026):
+**On Colab:** go to [colab.research.google.com](https://colab.research.google.com), **File → Upload notebook**, pick `wakeword/loki_wakeword_training.ipynb`, then **Runtime → Change runtime type → T4 GPU** (not a TPU). Run the cells top to bottom:
 
-**[Open in Colab](https://colab.research.google.com/github/Oreozisbored/openWakeWord/blob/modernize-training-notebook/notebooks/automatic_model_training.ipynb)**
+- **Cell 1:** settings. The defaults are the ones that worked: phrase `hey lowkee` (spelled so the synthetic voices say it the way you do), 50,000 examples, penalty 1000. Leave `save_to_drive` on: it keeps a checkpoint in your Google Drive, so a disconnect or Colab's session time limit doesn't cost you the hours of clip generation.
+- **Cells 2–4:** setup and about 16 GB of downloads. Each checks itself and stops with a clear message if something went wrong; re-running resumes.
+- **Cell 5** asks for `my_room_noise.zip`.
+- **Cell 7:** listen. If the voices don't say it like you, change the spelling in cell 1.
+- **Cell 8** trains, with all output visible.
+- **Cell 9** downloads `hey_lowkee.onnx`.
 
-Then **Runtime → Change runtime type → T4 GPU** (or L4 with Pro).
+**On your own PC:** the bottom of the notebook explains the one-time WSL2 + Jupyter setup. Locally there's no time limit, files stay on disk between runs, and cell 9 can copy the model straight into Loki's folder.
 
-### 3. Run sections 1–4
+### 3. Bring the model home
 
-Setup, hardware check, model downloads, and about 16 GB of training data. Takes 15–30 minutes.
-
-### 4. Add your room noise and music
-
-Click **+ Code** under section 4, paste this, run it, and pick `my_room_noise.zip` when it asks:
-
-```python
-# Extra background audio: your own room + some music
-import os, zipfile
-from google.colab import files
-
-os.makedirs("/content/my_room_noise", exist_ok=True)
-for name in files.upload():
-    zipfile.ZipFile(name).extractall("/content/my_room_noise")
-print(len(os.listdir("/content/my_room_noise")), "room clips")
-
-music = """
-import os, soundfile as sf
-from datasets import load_dataset, Audio
-os.makedirs("/content/fma", exist_ok=True)
-ds = load_dataset("rudraml/fma", name="small", split="train", streaming=True)
-ds = ds.cast_column("audio", Audio(sampling_rate=16000))
-for i, row in enumerate(ds):
-    if i >= 240: break                          # 240 x 30 s = 2 hours of music
-    sf.write(f"/content/fma/{i}.wav", row["audio"]["array"], 16000, subtype="PCM_16")
-"""
-open("/content/dl_music.py", "w").write(music)
-!/content/py311/bin/python /content/dl_music.py
-print(len(os.listdir("/content/fma")), "music clips")
-```
-
-If the music download errors, skip it — the notebook's own noise clips plus your room still cover most of what matters.
-
-### 5. Configure (section 5)
-
-Set the form fields, then run the cell:
-
-| Field | Value |
-|---|---|
-| `target_wake_word` | `hey loki` |
-| `number_of_examples` | `50000` (the maximum) |
-| `number_of_training_steps` | `50000` (the maximum) |
-| `false_activation_penalty` | `2000` |
-
-Then click **+ Code** under it and run this, which turns on the extra robustness settings the form doesn't show:
-
-```python
-import os, yaml
-cfg_path = f"/content/{model_clean_name}.yaml"
-cfg = yaml.safe_load(open(cfg_path))
-
-cfg["augmentation_rounds"] = 2       # each clip reused with fresh noise/echo: more variety
-
-# Sound-alikes that must NOT wake Loki (repeated so they get real weight).
-# Don't add "hey lowkey": it sounds identical to "hey loki" and would confuse the model.
-sound_alikes = ["hey lucky", "hey rocky", "hey locky", "hey luke", "hey lucy", "hey lori",
-                "hey look", "hey hockey", "hey mickey", "hey okay", "lucky", "low key",
-                "hockey", "jockey", "local", "hello"]
-cfg["custom_negative_phrases"] = sound_alikes * 100
-
-bg, rate = ["/content/background_clips"], [1]
-for folder, r in (("/content/fma", 1), ("/content/my_room_noise", 3)):   # your room counts 3x
-    if os.path.isdir(folder) and os.listdir(folder):
-        bg.append(folder); rate.append(r)
-cfg["background_paths"], cfg["background_paths_duplication_rate"] = bg, rate
-
-yaml.safe_dump(cfg, open(cfg_path, "w"))
-print("background:", bg, "| rounds:", cfg["augmentation_rounds"])
-```
-
-### 6. Check the pronunciation (section 6)
-
-Listen to the samples. If the voices don't say "Loki" the way you do, change `target_wake_word` to a phonetic spelling (for example `hey lowkee`), re-run section 5 and the cell after it, and listen again. The file will then be named after that spelling — rename it to `hey_loki.onnx` at the end.
-
-### 7. Train (section 7)
-
-This is the long part: generating 100,000 synthetic clips, adding noise and echo to them, then training. Keep the tab open. If Colab disconnects, reconnect and re-run sections 1–5 and your two extra cells; clip generation picks up where it left off as long as the runtime wasn't reset.
-
-Skip section 8 (TFLite) — Loki uses the ONNX file.
-
-### 8. Bring the model home
-
-In Colab's **Files** panel (folder icon on the left), open `model_hey_loki`, right-click `hey_loki.onnx` → **Download**. Put it in Loki's `wakeword/` folder and restart Loki. The startup message about "Hey Jarvis" goes away.
-
-Check it with the live meter:
+Rename the file to `hey_loki.onnx`, put it in Loki's `wakeword/` folder, and restart Loki. The startup message about "Hey Jarvis" goes away. Check it with the live meter:
 
 ```bash
 python wakeword_tools.py test
 ```
 
-Say "hey loki" from your desk, from across the room, with music on. Then talk normally, say "lucky", "Loki" on its own, "low key" — those should stay low. Saying just "Loki" without "hey" doesn't wake it, by design (the training treats partial phrases as non-matches), which avoids false wake-ups from TV and conversation.
+Say the wake word at your desk, from across the room, and with music on. Then talk normally, and say "lucky", "Loki" on its own and "low key" — those should stay low. Saying just "Loki" without "hey" doesn't wake it, by design: training treats partial phrases as non-matches, which avoids false wake-ups from TV and conversation.
 
-### 9. Teach it your voice (optional)
+### 4. Too strict or too jumpy? Retrain
+
+The **penalty** in cell 1 (`false_activation_penalty`) is the main knob: how hard training punishes false wake-ups.
+
+- **Too strict** (misses you, needs a loud voice): lower it. 2000 came out too strict; 1000 is openWakeWord's default; try 500 if 1000 is still sluggish.
+- **Too jumpy** (wakes up on its own): raise it, or train the voice verifier (step 5).
+
+Change it, then re-run cells 1, 6 and 8 in the same session. In a new Colab session, run all the cells; cell 8 restores the clips from your Drive checkpoint and goes straight to training. Each new model is also saved to Drive with its penalty in the name, and the previous one is kept, so you can compare.
+
+The training summary prints a **recall** (the share of hard, noisy test clips it caught; aim above about 0.5) and **false positives per hour** (aim under about 0.5). These numbers are a guide; the live meter with your own voice is what counts.
+
+### 5. Teach it your voice (optional)
 
 ```bash
 python wakeword_tools.py verifier
 ```
 
-Takes 2 minutes: you say "hey loki" 6 times and read 3 sentences. It trains a small extra check (`wakeword/hey_loki_verifier.pkl`) that only lets wake-ups through when it's **your** voice — the most effective way to stop false wake-ups from TV, YouTube and other people. The trade-off: Loki won't answer anyone else. Delete the file to undo.
+Takes 2 minutes: you say the wake word 6 times and read 3 sentences. It trains a small extra check (`wakeword/hey_loki_verifier.pkl`) that only lets wake-ups through when it's **your** voice — the most effective way to stop false wake-ups from TV, YouTube and other people. The trade-off: Loki won't answer anyone else. Delete the file to undo.
 
 ### Tuning
 
@@ -553,10 +487,11 @@ At the top of `wakeword.py`:
 | `THRESHOLD` | `0.5` | Raise to `0.6`–`0.7` if it wakes up when it shouldn't; lower to `0.4` if it misses you |
 | `PATIENCE` | `2` | Raise to `3` for fewer random wake-ups (needs a slightly longer, clearer "hey loki") |
 | `VAD_THRESHOLD` | `0.5` | Only wake up while someone is actually speaking. Keep it on |
+| `AUTO_GAIN` | `True` | Boosts quiet, distant speech for that voice check (steady noise is never boosted). Without it, speech from across the room is often ignored |
 | `END_SILENCE` | `0.9` s | Raise if Loki cuts you off mid-sentence when you pause to think |
 | `MIC_DEVICE` | `None` | Set to a microphone's name or number if the default isn't the one you talk into |
 
-The live meter (`wakeword_tools.py test`) shows your scores, so you can see where to set `THRESHOLD`.
+The live meter (`wakeword_tools.py test`) scores audio exactly the way Loki does. Each line shows the wake-word **score**, the **mic** loudness and how much it's being boosted, and the **voice** check. If the score is high but nothing wakes, the voice check is the problem; if the mic level stays around -50 dB while you talk, the microphone is too quiet (see troubleshooting).
 
 ---
 
@@ -594,7 +529,7 @@ LokiAIAssistant/
 ├── chat_images/            # Copies of images you've attached (auto-created)
 ├── AI_Icon.png             # Tray and window icon
 ├── voices/                 # Piper voice files (you download these)
-├── wakeword/               # hey_loki.onnx (you train it), your voice verifier, room noise
+├── wakeword/               # hey_loki.onnx (you train it), training notebook, voice verifier, room noise
 ├── logs/                   # Daily log files in tray mode (auto-created)
 ├── .gitattributes          # Line-ending rules (keeps web/vendor/ byte-exact)
 └── requirements.txt
@@ -709,6 +644,17 @@ openWakeWord or its base models are missing. Run `pip install openwakeword` and 
 
 Run `python wakeword_tools.py test` and watch the scores. If your "hey loki" peaks below the threshold, lower `THRESHOLD` (or move the mic closer); if other sounds cross it, raise `THRESHOLD` or `PATIENCE`, record more room noise and retrain, or train the voice verifier. See **Tuning** in the wake word training section.
 
+### "Hey Loki" only works up close, or not with the laptop's microphone
+
+Most of this is the microphone's level and distance:
+
+- **Turn the mic up.** Settings → System → Sound → your microphone → **Input volume** 90–100. For more, open the classic Sound Control Panel (Settings → System → Sound → **More sound settings** → **Recording** tab → your mic → **Properties** → **Levels**) and raise **Microphone Boost** to +10 or +20 dB if it's there.
+- **Check it on the meter.** Speaking normally from where you'll sit, the `mic` column should read about -35 dB or louder. Around -50 dB is too quiet to work reliably.
+- **Distance is hard for a laptop mic.** Smart speakers use several microphones to hear across a room. From 5–6 feet, a laptop's built-in mic works only in a quiet room with the boost on; a USB conference microphone ("speakerphone" style, made for picking up a room) makes far-away use reliable.
+- **Retrain for the mic you'll use.** If you mostly talk to the laptop mic from a distance, record room noise with that mic (`python wakeword_tools.py noise 20` with the earphones unplugged) and retrain.
+
+Loki follows Windows' default microphone: plug or unplug earphones and it switches within a few seconds (the log says `[WAKE] microphone: ...`). This needs `pycaw` (`pip install pycaw`). Without it, Loki still recovers when a mic stops working, but doesn't notice a newly plugged-in one.
+
 ### Voice transcription is inaccurate
 
 Edit `voice.py` and change `WHISPER_MODEL_SIZE = "small.en"` to `"medium.en"`. Larger model, more accurate, slower.
@@ -799,4 +745,4 @@ Loki is built on top of excellent open-source projects:
 - [marked](https://marked.js.org) for markdown rendering
 - [SymPy](https://www.sympy.org) for symbolic calculus
 - [pdfplumber](https://github.com/jsvine/pdfplumber) for PDF text extraction
-- [openWakeWord](https://github.com/dscripka/openWakeWord) for the "Hey Loki" wake word, with Silero VAD
+- [openWakeWord](https://github.com/dscripka/openWakeWord) for the "Hey Loki" wake word, with Silero VAD; the training notebook builds on its automatic training notebook and the Colab fixes in [PR #359](https://github.com/dscripka/openWakeWord/pull/359)
