@@ -55,8 +55,8 @@ All run locally through Ollama. Pull them during setup. You can switch models an
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/shravanpatel30/LokiAIAssistant.git
-cd LokiAIAssistant
+git clone https://github.com/shravanpatel30/NexusAIAssistant.git
+cd NexusAIAssistant
 ```
 
 ### 2. Install Python dependencies
