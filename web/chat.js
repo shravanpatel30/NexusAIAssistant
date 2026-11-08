@@ -1,4 +1,4 @@
-// Loki chat renderer: markdown via marked, math via KaTeX. Fully offline.
+// Chat renderer: markdown via marked, math via KaTeX. Fully offline.
 //
 // Python talks to this page through two functions:
 //   addMessage(role, text, reasoning, images)   role = "user" | "assistant" | "system"

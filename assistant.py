@@ -1,4 +1,4 @@
-"""Loki — a local AI assistant for Windows.
+"""Nexus — a local AI assistant for Windows.
 
 How a message flows:
     front end (text REPL / voice / chat window)
@@ -50,9 +50,10 @@ import system_info
 import tray as tray_module
 import voice
 import wakeword
+from app_info import APP_NAME, WAKE_PHRASE
 
 if sys.platform == "win32":
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Loki.LocalAssistant.1.0")
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(f"{APP_NAME}.LocalAssistant.1.0")
 
 
 # ============================================================================
@@ -62,7 +63,7 @@ BASE_DIR = Path(__file__).parent
 APPS_FILE = BASE_DIR / "apps.json"
 MANUAL_APPS_FILE = BASE_DIR / "manual_apps.json"
 LATEX_PREFS_FILE = BASE_DIR / "latex_preferences.md"
-LOCKFILE = os.path.join(tempfile.gettempdir(), "loki_assistant.lock")
+LOCKFILE = os.path.join(tempfile.gettempdir(), f"{APP_NAME.lower()}_assistant.lock")
 
 # Which models to use is chosen in the chat window (see models.py / settings.json)
 OLLAMA_URL = "http://127.0.0.1:11434/api/chat"   # 127.0.0.1, not localhost: on Windows, localhost tries IPv6 first and adds ~2 s per call
@@ -73,12 +74,13 @@ THINKING = False        # thinking mode: reason before answering (chat + PDF Q&A
 
 MAX_HISTORY_TURNS = 10  # chat turns the model remembers
 
-LOKI_IDENTITY = """You are Loki, a local AI assistant running privately on the user's PC.
+ASSISTANT_IDENTITY = f"""You are {APP_NAME}, a local AI assistant running privately on the user's PC.
 Your features include: chat and Q&A, searching the web (Google, Maps, YouTube, Wikipedia,
 etc.), opening apps and websites, setting one-off and recurring reminders, reading PDFs and
 answering questions about them, converting text to LaTeX, exact symbolic calculus (integrate,
 differentiate), quick arithmetic, system info queries (CPU, RAM, disk, battery, uptime),
 and understanding images the user pastes or drops into the chat (equations, plots, circuits, handwriting).
+The user can talk to you by saying "{WAKE_PHRASE}" or holding F9.
 When users ask what you can do, describe these specific capabilities."""
 
 # Set in tray_mode() so code running in background threads can post to the window
@@ -98,9 +100,9 @@ if "--tray" in sys.argv:
 # Single-instance lock (tray mode)
 # ============================================================================
 def _pid_is_running(pid):
-    """True if pid is a live Python process, i.e. probably another Loki.
+    """True if pid is a live Python process, i.e. probably another copy of the assistant.
 
-    Checking the name matters: Windows reuses PIDs, so after Loki exits
+    Checking the name matters: Windows reuses PIDs, so after the assistant exits
     uncleanly its old PID can belong to an unrelated program."""
     try:
         name = psutil.Process(pid).name().lower()
@@ -390,14 +392,14 @@ def _build_chat_messages(message, images=None):
     works from the transcription."""
     if images:
         _remember("user", f"{message} [image attached]")
-        messages = [{"role": "system", "content": LOKI_IDENTITY + IMAGE_RULES}, *chat_history]
+        messages = [{"role": "system", "content": ASSISTANT_IDENTITY + IMAGE_RULES}, *chat_history]
         messages[-1] = dict(messages[-1], images=images)
         return messages
 
     _remember("user", message)
 
     if not pdf_handler.is_attached():
-        return [{"role": "system", "content": LOKI_IDENTITY}, *chat_history]
+        return [{"role": "system", "content": ASSISTANT_IDENTITY}, *chat_history]
 
     info = pdf_handler.get_info()
     if any(t in message.lower() for t in SUMMARY_TRIGGERS):
@@ -530,7 +532,7 @@ def answer_about_images(question, image_paths, stream=False, on_status=None):
                      f"Pick one marked 👁 in the Images dropdown, e.g. after "
                      f"'ollama pull qwen3-vl:8b-instruct'.")
     if on_status:
-        on_status(f"Loki is looking ({model})")
+        on_status(f"{APP_NAME} is looking ({model})")
     question = question.strip() or DEFAULT_IMAGE_QUESTION
     answer, reasoning = chat(question, stream=stream, images=[_b64(p) for p in image_paths])
     return Reply(answer, kind="assistant", streamed=stream, reasoning=reasoning)
@@ -1003,7 +1005,7 @@ def set_thinking(on):
 
 
 # ============================================================================
-# Wake word ("Hey Loki") — see wakeword.py
+# Wake word ("Hey Nexus") — see wakeword.py
 # ============================================================================
 _wake_listener = None        # created by the voice/tray front ends
 _wake_handler = None         # what to do with a spoken command (set by the front end)
@@ -1011,7 +1013,7 @@ _wake_on_wake = None         # what to show when the wake word is heard
 
 
 def _on_wake_command(audio):
-    """Called on the listener thread with what you said after "Hey Loki"."""
+    """Called on the listener thread with what you said after the wake word."""
     text = wakeword.strip_wake_phrase(voice.transcribe(audio)) if audio is not None else ""
     print(f"[WAKE] you said: {text!r}", flush=True)
     if _wake_handler:
@@ -1036,7 +1038,7 @@ def start_wake_word(on_wake=None):
 
 
 def set_wake_word(on):
-    """Turn "Hey Loki" listening on/off (remembered in settings.json)."""
+    """Turn wake-word listening on/off (remembered in settings.json)."""
     models.set_setting("wake_word", bool(on))
     if not on:
         if _wake_listener and _wake_listener.running:
@@ -1111,7 +1113,7 @@ def handle_voice(user_text):
 
 def voice_mode():
     """Push-to-talk: hold the hotkey to record, release to transcribe and run.
-    "Hey Loki" works too, if the wake word is on."""
+    The wake word works too, if it is on."""
     global _wake_handler
     reminders.start()
     voice.preload()
@@ -1326,7 +1328,7 @@ def tray_mode():
     voice_thread = threading.Thread(target=_voice_loop_for_tray, args=(running,), daemon=True)
     voice_thread.start()
 
-    # "Hey Loki": what you say after the wake word goes to the window like F9
+    # Wake word: what you say after it goes to the window like F9
     global _wake_handler
 
     def on_wake_text(text):
@@ -1355,7 +1357,7 @@ def tray_mode():
 
     # Leftover background threads (scheduler, web engine) can keep Python
     # alive after the window closes. Release the lock and exit for real so
-    # restarting Loki always works.
+    # restarting the assistant always works.
     release_lock()
     sys.stdout.flush()
     os._exit(0)

@@ -36,4 +36,6 @@ model_eval/
 wakeword/my_room_noise/
 wakeword/my_room_noise.zip
 wakeword/verifier_clips/
-wakeword/hey_loki_verifier.pkl
+wakeword/my_voice/
+wakeword/my_voice.zip
+wakeword/*_verifier.pkl

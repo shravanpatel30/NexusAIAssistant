@@ -5,6 +5,8 @@ from pathlib import Path
 import pystray
 from PIL import Image
 
+from app_info import APP_NAME
+
 ICON_FILE = Path(__file__).parent / "AI_Icon.png"
 
 
@@ -53,9 +55,9 @@ class TrayApp:
     def run(self):
         """Blocks until stop(). Use run_in_thread() instead from the app."""
         self.icon = pystray.Icon(
-            "Loki",
+            APP_NAME,
             Image.open(ICON_FILE),
-            "Loki AI Assistant",
+            f"{APP_NAME} AI Assistant",
             menu=self._build_menu(),
         )
         self.icon.run()

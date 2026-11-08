@@ -1,4 +1,4 @@
-"""Chat window UI for Loki.
+"""Chat window UI for the assistant.
 
 The conversation is shown in an embedded web view (web/chat.html) so replies
 get proper markdown and KaTeX math rendering. Everything else — input box,
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 import models
+from app_info import APP_NAME
 
 BASE_DIR = Path(__file__).parent
 CHAT_PAGE = BASE_DIR / "web" / "chat.html"
@@ -55,7 +56,7 @@ def _load_ui_font():
 class ChatBridge(QObject):
     user_said = Signal(str, list)            # text, image file paths
     assistant_said = Signal(str, str)        # answer, reasoning ("" unless thinking mode)
-    busy_text = Signal(str)                  # status text during slow steps ("Loki is looking")
+    busy_text = Signal(str)                  # status text during slow steps ("Nexus is looking")
     system_message = Signal(str)
     show_window_requested = Signal()
     quit_requested = Signal()
@@ -206,13 +207,13 @@ class ReminderPopup(QWidget):
 
 
 # ---------------------------------------------------------------------------
-# "Loki is thinking..." indicator in the status line
+# "Nexus is thinking..." indicator in the status line
 # ---------------------------------------------------------------------------
 class Throbber:
     def __init__(self, status_label, idle_text, busy_text):
         self.status_label = status_label
         self.idle_text = idle_text          # function returning the resting text
-        self.busy_text = busy_text          # function: "Loki is thinking" / "...reasoning"
+        self.busy_text = busy_text          # function: "Nexus is thinking" / "...reasoning"
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
         self.frame = 0
@@ -229,7 +230,7 @@ class Throbber:
         self.timer.start(400)
 
     def set_base(self, text):
-        """Change the busy text mid-task, e.g. "Loki is looking (qwen3-vl)"."""
+        """Change the busy text mid-task, e.g. "Nexus is looking (qwen3-vl)"."""
         self.base = text
         if self.running:
             self.status_label.setText(text + "." * self.frame)
@@ -327,7 +328,7 @@ class ChatWindow(QMainWindow):
     def __init__(self, bridge):
         super().__init__()
         self.bridge = bridge
-        self.setWindowTitle("Loki")
+        self.setWindowTitle(APP_NAME)
         self.resize(760, 640)
         self.setWindowIcon(QIcon(str(ICON_FILE)))
         self.setAcceptDrops(True)
@@ -493,8 +494,8 @@ class ChatWindow(QMainWindow):
         self.throbber = Throbber(
             self.status,
             idle_text=lambda: self._idle_status,
-            busy_text=lambda: ("Loki is reasoning" if self.think_button.isChecked()
-                               else "Loki is thinking"),
+            busy_text=lambda: (f"{APP_NAME} is reasoning" if self.think_button.isChecked()
+                               else f"{APP_NAME} is thinking"),
         )
 
         # --- Bridge signals ---
@@ -518,7 +519,7 @@ class ChatWindow(QMainWindow):
         if not KATEX_JS.exists():
             self._append_system(
                 "Math/markdown libraries not found — run "
-                "'python setup_web_assets.py' once, then restart Loki."
+                "'python setup_web_assets.py' once, then restart the assistant."
             )
 
         self._load_recent_history()
@@ -534,7 +535,7 @@ class ChatWindow(QMainWindow):
     def _refresh_models(self, attempt=0):
         up = all([combo.refresh() for combo in self.model_combos.values()])
         self._update_think_button()
-        # Right after the PC boots, Loki can start before Ollama does: check
+        # Right after the PC boots, the assistant can start before Ollama does: check
         # again every 3 s (for up to 3 minutes) so 👁 and Think show up on their own
         if not up and attempt < 60:
             QTimer.singleShot(3000, lambda: self._refresh_models(attempt + 1))

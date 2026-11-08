@@ -1,8 +1,8 @@
-"""'Hey Loki' wake word: listens to the microphone, and when it hears the
+"""The wake word ("Hey Nexus", set in app_info.py): listens to the microphone, and when it hears the
 phrase, records what you say next and hands it to a callback.
 
 Uses openWakeWord (runs locally on the CPU, a few % of one core). The model
-file is wakeword/hey_loki.onnx, trained once with the notebook in wakeword/
+file is wakeword/hey_nexus.onnx, trained once with the notebook in wakeword/
 (see the README's wake word section). Until that file exists, the ready-made
 "hey jarvis" model is used, so you can test everything before training.
 
@@ -13,14 +13,14 @@ How a wake-up goes:
      noise. It listens to a *boosted* copy of the audio (AutoGain), because
      on quiet, distant speech it otherwise misses the voice and blocks real
      wake-ups. The wake-word model itself hears the original audio.
-  3. A score above THRESHOLD for PATIENCE frames in a row = "Hey Loki".
+  3. A score above THRESHOLD for PATIENCE frames in a row = the wake word.
   4. A short chime plays, and what you say next is recorded until you stop
      talking (END_SILENCE), then passed to on_command().
 
 The microphone follows Windows: if the default mic changes (earphones
 plugged in or out) or stops sending audio, the listener reopens it, and if
-no mic is available at startup it keeps retrying. While Loki is speaking or
-F9 is held, the listener ignores the mic, so Loki can't wake itself up.
+no mic is available at startup it keeps retrying. While the assistant is
+speaking or F9 is held, the listener ignores the mic, so it can't wake itself up.
 """
 import queue
 import re
@@ -31,10 +31,13 @@ from pathlib import Path
 
 import numpy as np
 
+from app_info import WAKE_PHRASE
+
 WAKE_DIR = Path(__file__).parent / "wakeword"
-WAKE_MODEL = WAKE_DIR / "hey_loki.onnx"              # your trained model
-VERIFIER_MODEL = WAKE_DIR / "hey_loki_verifier.pkl"  # optional: tuned to your voice
-PLACEHOLDER_MODEL = "hey_jarvis"                      # used until hey_loki.onnx exists
+_SLUG = WAKE_PHRASE.strip().lower().replace(" ", "_")          # "hey_nexus"
+WAKE_MODEL = WAKE_DIR / f"{_SLUG}.onnx"                         # your trained model
+VERIFIER_MODEL = WAKE_DIR / f"{_SLUG}_verifier.pkl"             # optional: tuned to your voice
+PLACEHOLDER_MODEL = "hey_jarvis"                                # used until WAKE_MODEL exists
 
 # ---- Tuning (`python wakeword_tools.py test` shows live scores to tune these) ----
 THRESHOLD = 0.5          # wake-word score needed (0-1). Higher = fewer false wake-ups
@@ -58,9 +61,12 @@ RETRY_SECONDS = 5.0      # retry interval when no microphone can be opened
 SAMPLE_RATE = 16000
 FRAME = 1280             # 80 ms at 16 kHz — openWakeWord's frame size
 
-# Leading wake phrase that Whisper sometimes includes: "Hey Loki, open Spotify"
+# Leading wake phrase that Whisper sometimes includes: "Hey Nexus, open Spotify"
+# (plus the ways Whisper tends to mishear it, and the placeholder "Jarvis")
+_NAME = WAKE_PHRASE.split()[-1].lower()
 _WAKE_PREFIX_RE = re.compile(
-    r"^\s*(?:(?:hey|hi|okay|ok|yo)[\s,]+)?(?:loki|low[\s-]?k(?:ey|ee|i)|lokey|lokee|jarvis)\b[\s,.!?:;-]*",
+    r"^\s*(?:(?:hey|hi|okay|ok|yo)[\s,]+)?(?:" + re.escape(_NAME) +
+    r"|nexis|nexxus|next us|jarvis)\b[\s,.!?:;-]*",
     re.IGNORECASE)
 
 
@@ -70,11 +76,11 @@ def strip_wake_phrase(text):
 
 def model_description():
     """Which phrase to say, for status messages."""
-    return "Hey Loki" if WAKE_MODEL.exists() else "Hey Jarvis (placeholder until wakeword/hey_loki.onnx exists)"
+    return WAKE_PHRASE if WAKE_MODEL.exists() else f"Hey Jarvis (placeholder until wakeword/{WAKE_MODEL.name} exists)"
 
 
 def _load_model():
-    from openwakeword.model import Model   # imported here so Loki runs without it
+    from openwakeword.model import Model   # imported here so the assistant runs without it
 
     if WAKE_MODEL.exists():
         source, name = str(WAKE_MODEL), WAKE_MODEL.stem
@@ -220,7 +226,7 @@ class WakeWordListener:
     on_command(audio):  float32 16 kHz numpy array of what you said, or None if
                         you said nothing. Runs on the listener thread; the mic
                         is ignored until it returns, so it can take its time.
-    is_busy():          return True while Loki is speaking or recording (F9).
+    is_busy():          return True while the assistant is speaking or recording (F9).
     """
 
     def __init__(self, on_command, on_wake=None, is_busy=lambda: False):
@@ -359,7 +365,7 @@ class WakeWordListener:
             last_audio = time.monotonic()
             if len(frame) != FRAME:
                 continue
-            if self.is_busy():                      # Loki talking / F9 held
+            if self.is_busy():                      # assistant talking / F9 held
                 was_busy = True
                 continue
             if was_busy:

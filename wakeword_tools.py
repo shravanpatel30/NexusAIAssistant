@@ -1,10 +1,11 @@
-"""Helpers for Loki's "Hey Loki" wake word. Run from the project folder:
+"""Helpers for the wake word ("Hey Nexus"). Run from the project folder:
 
     python wakeword_tools.py setup      one-time: download openWakeWord's base models
-    python wakeword_tools.py test       live meter: see the score as you talk, to tune THRESHOLD
+    python wakeword_tools.py myvoice    record ~60 clips of you saying the wake phrase, for training
     python wakeword_tools.py noise 20   record 20 min of your room's usual sounds for training
+    python wakeword_tools.py test       live meter: see the score as you talk, to tune THRESHOLD
     python wakeword_tools.py verifier   optional: teach the wake word your voice
-    python wakeword_tools.py misses     after some use: why "Hey Loki" didn't wake
+    python wakeword_tools.py misses     after some use: why the wake word didn't wake
 
 See the README's "Wake word" section for the whole process.
 """
@@ -18,9 +19,11 @@ from pathlib import Path
 import numpy as np
 
 import wakeword
+from app_info import APP_NAME, WAKE_PHRASE
 
 SAMPLE_RATE = wakeword.SAMPLE_RATE
 NOISE_DIR = wakeword.WAKE_DIR / "my_room_noise"
+VOICE_DIR = wakeword.WAKE_DIR / "my_voice"
 CLIPS_DIR = wakeword.WAKE_DIR / "verifier_clips"
 
 
@@ -50,12 +53,12 @@ def setup():
     wakeword.WAKE_DIR.mkdir(exist_ok=True)
     print("\nDone. Put your trained model at", wakeword.WAKE_MODEL)
     if not wakeword.WAKE_MODEL.exists():
-        print("Until then, Loki answers to \"Hey Jarvis\" so you can try it out.")
+        print(f"Until then, {APP_NAME} answers to \"Hey Jarvis\" so you can try it out.")
 
 
 # ---------------------------------------------------------------- test
 def test():
-    """Print the wake-word score live, scored exactly the way Loki does. Say
+    """Print the wake-word score live, scored exactly the way the assistant does. Say
     the phrase from different spots in the room, with music or a fan on, and
     see where the score lands. Follows Windows' default mic if you unplug one."""
     import collections
@@ -99,11 +102,85 @@ def test():
         print()
 
 
+# ---------------------------------------------------------------- myvoice
+VOICE_ROUNDS = [                      # (how to say it, how many times)
+    ("normally, the way you usually would", 15),
+    ("quickly, like you're in a hurry", 10),
+    ("slowly and clearly", 8),
+    ("quietly, almost under your breath", 8),
+    ("from farther away: step back a few feet or turn away from the mic", 10),
+    ("casually, mid-task, as if you're busy with something else", 9),
+]
+
+
+def _beep():
+    import sounddevice as sd
+    t = np.arange(int(0.08 * 22050)) / 22050
+    sd.play((0.2 * np.sin(2 * np.pi * 990 * t) * np.minimum(1, np.minimum(t, t[::-1]) / 0.01)).astype(np.float32), 22050)
+    sd.wait()
+    time.sleep(0.1)                   # so the beep itself isn't recorded
+
+
+def _trim(audio):
+    """Cut the silence around the phrase. Training lines every clip up so the
+    phrase ends at the end of a ~2 s window, so the end is trimmed tight."""
+    win = SAMPLE_RATE // 100                                   # 10 ms
+    n = len(audio) // win
+    rms = np.sqrt(np.mean(audio[:n * win].astype(np.float32).reshape(n, win) ** 2, axis=1))
+    floor = np.percentile(rms, 10)
+    loud = np.where(rms > max(rms.max() * 0.08, floor * 3))[0]
+    if len(loud) == 0:
+        return audio[:0]
+    start = max(0, (loud[0] - 10) * win)                       # keep 100 ms before
+    end = min(len(audio), (loud[-1] + 5) * win)                # and 50 ms after
+    return audio[start:end]
+
+
+def myvoice():
+    """Record you saying the wake phrase ~60 times, in different ways. The
+    training notebook mixes these in with its synthetic voices, so the model
+    learns how *you* actually say it — the biggest single fix for misses."""
+    from openwakeword.vad import VAD
+    vad = VAD()
+    VOICE_DIR.mkdir(parents=True, exist_ok=True)
+    n = len(list(VOICE_DIR.glob("*.wav")))
+    total = sum(k for _, k in VOICE_ROUNDS)
+    print(f"Recording \"{WAKE_PHRASE}\" {total} times in {len(VOICE_ROUNDS)} rounds. "
+          f"Say it once after each beep. Use the mic you'll normally use.")
+    if n:
+        print(f"({n} clips already in {VOICE_DIR}; new ones are added. Delete the folder to start over.)")
+    try:
+        for r, (how, count) in enumerate(VOICE_ROUNDS, 1):
+            input(f"\nRound {r}/{len(VOICE_ROUNDS)}: say it {how}. Press Enter to start...")
+            done = 0
+            while done < count:
+                _beep()
+                audio = _record(2.2)
+                clip = _trim(audio)
+                vad.reset_states()
+                speech = max((vad.predict(clip[i:i + 1280], frame_size=640)
+                              for i in range(0, len(clip) - 1280, 1280)), default=0)
+                if not 0.35 <= len(clip) / SAMPLE_RATE <= 1.9 or speech < 0.5:
+                    print("    (didn't catch that — once more)")
+                    continue
+                _save_wav(VOICE_DIR / f"voice_{n:04d}.wav", clip)
+                n, done = n + 1, done + 1
+                print(f"\r  {done}/{count}", end="", flush=True)
+            print()
+    except KeyboardInterrupt:
+        print("\nStopped early — the clips so far are kept.")
+    zip_path = wakeword.WAKE_DIR / "my_voice.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for wav in sorted(VOICE_DIR.glob("*.wav")):
+            z.write(wav, wav.name)
+    print(f"\n{n} clips → {zip_path}\nGive that zip to the training notebook (cell 5).")
+
+
 # ---------------------------------------------------------------- noise
 def noise(minutes=20):
     """Record your room's everyday sounds (fan, typing, music or TV you usually
     have on, you talking on calls — anything but the wake word). Training mixes
-    these under the synthetic "hey loki" clips, so the model learns to ignore
+    these under the synthetic wake-phrase clips, so the model learns to ignore
     exactly the noise it will hear here. Saves 10-second clips + a zip to upload."""
     minutes = float(minutes)
     print(f"Recording {minutes:g} minutes of room sound. Go about your usual work — "
@@ -139,7 +216,7 @@ SENTENCES = [
 def verifier():
     """Record a few clips of you, then train a small model that only lets
     wake-ups through when it's your voice. Cuts false wake-ups from TV, music
-    and other people a lot — at the cost of Loki not answering anyone else."""
+    and other people a lot — at the cost of not answering anyone else."""
     if not wakeword.WAKE_MODEL.exists():
         sys.exit(f"Train your wake word first: {wakeword.WAKE_MODEL} doesn't exist yet.")
     import openwakeword
@@ -147,9 +224,9 @@ def verifier():
         shutil.rmtree(CLIPS_DIR)
     positives, negatives = [], []
 
-    print("Part 1 of 2: say \"Hey Loki\" when prompted, the way you normally would.")
+    print(f"Part 1 of 2: say \"{WAKE_PHRASE}\" when prompted, the way you normally would.")
     for i in range(6):
-        input(f"  [{i + 1}/6] Press Enter, then say \"Hey Loki\"...")
+        input(f"  [{i + 1}/6] Press Enter, then say \"{WAKE_PHRASE}\"...")
         path = CLIPS_DIR / f"positive_{i}.wav"
         _save_wav(path, _record(2.5))
         positives.append(str(path))
@@ -173,15 +250,15 @@ def verifier():
             inference_framework="onnx",
         )
     except ValueError as e:
-        sys.exit(f"\nCouldn't train: {e}\nThe wake-word model didn't detect your \"Hey Loki\" "
+        sys.exit(f"\nCouldn't train: {e}\nThe wake-word model didn't detect your \"{WAKE_PHRASE}\" "
                  f"clips. Check with 'python wakeword_tools.py test' first.")
-    print(f"\nSaved {wakeword.VERIFIER_MODEL}. Restart Loki to use it. "
+    print(f"\nSaved {wakeword.VERIFIER_MODEL}. Restart {APP_NAME} to use it. "
           f"Delete that file to go back to answering anyone.")
 
 
 # ---------------------------------------------------------------- misses
 def misses():
-    """Summarize wake-ups and near misses from Loki's logs (logs/log_*.txt)."""
+    """Summarize wake-ups and near misses from the assistant's logs (logs/log_*.txt)."""
     import re
     from collections import Counter
     wakes, near, old_wakes = [], [], 0
@@ -195,7 +272,7 @@ def misses():
                 near.append((float(m.group(1)), m.group(2)))
     if not wakes and not near:
         sys.exit("No wake-word activity logged yet (or only from before near-miss logging). "
-                 "Use Loki for a while in tray mode, then run this again.")
+                 f"Use {APP_NAME} for a while in tray mode, then run this again.")
     print(f"Since near-miss logging started:  wake-ups {len(wakes)}   near misses {len(near)}")
     if old_wakes:
         print(f"(plus {old_wakes} earlier wake-ups, not counted: there's no record of misses from then)")
@@ -242,7 +319,8 @@ def misses():
 
 
 if __name__ == "__main__":
-    commands = {"setup": setup, "test": test, "noise": noise, "verifier": verifier, "misses": misses}
+    commands = {"setup": setup, "myvoice": myvoice, "test": test, "noise": noise,
+                "verifier": verifier, "misses": misses}
     if len(sys.argv) < 2 or sys.argv[1] not in commands:
         print(__doc__)
         sys.exit(1)

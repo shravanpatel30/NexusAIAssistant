@@ -27,8 +27,8 @@ _whisper = None
 _piper = None
 _load_lock = threading.Lock()
 
-# True while Loki is talking or F9 is held, so the wake-word listener
-# ignores the mic (Loki saying "Loki" mustn't wake itself up)
+# True while the assistant is talking or F9 is held, so the wake-word listener
+# ignores the mic (it mustn't wake itself up by saying its own name)
 _speaking = threading.Event()
 _recording = threading.Event()
 

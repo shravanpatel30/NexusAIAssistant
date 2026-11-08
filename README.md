@@ -1,6 +1,6 @@
-# Loki — A Private Local AI Assistant
+# Nexus — A Private Local AI Assistant
 
-Loki is a desktop AI assistant that runs entirely on your own machine. No cloud APIs, no data sent to any external service. It can:
+Nexus is a desktop AI assistant that runs entirely on your own machine. No cloud APIs, no data sent to any external service. It can:
 
 - Open apps and websites by voice or text ("open Spotify", "go to youtube.com in Chrome")
 - Set reminders with natural-language times ("remind me in 30 minutes to check the oven")
@@ -8,7 +8,7 @@ Loki is a desktop AI assistant that runs entirely on your own machine. No cloud 
 - Answer questions about your computer's status (CPU, RAM, disk, battery, uptime, local IP)
 - Evaluate arithmetic expressions instantly and locally
 - Answer general questions and help with coding via a local LLM
-- Listen to voice commands — say "Hey Loki" or hold F9 — and speak responses
+- Listen to voice commands — say "Hey Nexus" or hold F9 — and speak responses
 - Live quietly in your system tray, available whenever you press the hotkey
 - Read PDFs and answer questions about them, with local semantic search (RAG)
 - Convert text and equations to LaTeX
@@ -27,14 +27,14 @@ Built for Windows. The LLM, speech recognition, and text-to-speech all run local
 
 - **Windows 10 or 11** (64-bit)
 - **16 GB RAM** minimum
-- **NVIDIA GPU with 8 GB VRAM** strongly recommended (Loki was built and tested on an RTX 3070 Ti laptop GPU). CPU-only inference works but is much slower.
+- **NVIDIA GPU with 8 GB VRAM** strongly recommended (Nexus was built and tested on an RTX 3070 Ti laptop GPU). CPU-only inference works but is much slower.
 - **15 GB free disk space** for the language model and dependencies
 
 If your hardware is significantly weaker, see the **Smaller hardware** section at the bottom for tweaks.
 
 ### Software prerequisites
 
-These must be installed before setting up Loki:
+These must be installed before setting up Nexus:
 
 1. **Python 3.10 or newer** — [python.org](https://www.python.org/downloads/). During install, check "Add Python to PATH."
 2. **Ollama** — [ollama.com](https://ollama.com). One-click installer. After install, open a terminal and verify with `ollama --version`.
@@ -85,7 +85,7 @@ This downloads ~5 GB. The model is the brain of the assistant — it handles com
 
 #### Pull the embedding model (for PDF reading)
 
-Loki uses a local embedding model to search within PDFs:
+Nexus uses a local embedding model to search within PDFs:
 
 ```bash
 ollama pull nomic-embed-text
@@ -99,11 +99,11 @@ This is small (~270 MB) and runs locally. Without it, PDF question-answering won
 ollama pull qwen3-vl:8b-instruct
 ```
 
-About 6 GB. Use the **instruct** tag: the plain `qwen3-vl:8b` is a thinking model that often runs out of room before it finishes answering. Without a vision model everything else still works; Loki just tells you it can't read images.
+About 6 GB. Use the **instruct** tag: the plain `qwen3-vl:8b` is a thinking model that often runs out of room before it finishes answering. Without a vision model everything else still works; Nexus just tells you it can't read images.
 
 ### 4. Download a Piper voice
 
-Loki needs a voice file for text-to-speech. Download from the Piper voices repository:
+Nexus needs a voice file for text-to-speech. Download from the Piper voices repository:
 
 - Go to [huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/amy/medium](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/amy/medium)
 - Download both files: `en_US-amy-medium.onnx` and `en_US-amy-medium.onnx.json`
@@ -114,7 +114,7 @@ Other voices work too — browse the parent directory for options. If you use a 
 
 ### 5. Discover installed applications
 
-This scans your system for installed apps so Loki can launch them by name:
+This scans your system for installed apps so Nexus can launch them by name:
 
 ```bash
 python discover_apps.py
@@ -147,20 +147,20 @@ Restart any terminal after setting these.
 
 ### 8. Wake word (optional)
 
-To talk to Loki hands-free by saying "Hey Loki", install openWakeWord and download its base models once:
+To talk to Nexus hands-free by saying "Hey Nexus", install openWakeWord and download its base models once:
 
 ```bash
 pip install openwakeword pycaw
 python wakeword_tools.py setup
 ```
 
-`pycaw` lets Loki notice when Windows switches microphones (earphones plugged in or out) and follow along.
+`pycaw` lets Nexus notice when Windows switches microphones (earphones plugged in or out) and follow along.
 
-Until you train your own "Hey Loki" model (see **Training the "Hey Loki" wake word** below, with the notebook in `wakeword/`), Loki answers to **"Hey Jarvis"**, one of openWakeWord's ready-made phrases, so you can try everything out first. Without openWakeWord, F9 works as usual.
+Until you train your own "Hey Nexus" model (see **Training the "Hey Nexus" wake word** below, with the notebook in `wakeword/`), Nexus answers to **"Hey Jarvis"**, one of openWakeWord's ready-made phrases, so you can try everything out first. Without openWakeWord, F9 works as usual.
 
 ---
 
-## Running Loki
+## Running Nexus
 
 Three modes, depending on how you want to use it:
 
@@ -178,7 +178,7 @@ Opens a REPL in your terminal. Type commands, see responses inline. Best for ver
 python assistant.py --voice
 ```
 
-Hold **F9** to speak, release to send — or say "Hey Loki" and then your command. Replies print in the terminal; say "voice on" to also have them spoken aloud through your default audio device. Say "exit" or press `Ctrl+C` to quit.
+Hold **F9** to speak, release to send — or say "Hey Nexus" and then your command. Replies print in the terminal; say "voice on" to also have them spoken aloud through your default audio device. Say "exit" or press `Ctrl+C` to quit.
 
 ### Tray mode (recommended for daily use)
 
@@ -186,7 +186,7 @@ Hold **F9** to speak, release to send — or say "Hey Loki" and then your comman
 python assistant.py --tray
 ```
 
-Loki runs silently in your system tray. Left-click the tray icon to open the chat window. Say "Hey Loki", or hold F9, to talk to it from anywhere. Right-click the tray icon and choose Quit (or type `exit` in the chat window) to exit cleanly.
+Nexus runs silently in your system tray. Left-click the tray icon to open the chat window. Say "Hey Nexus", or hold F9, to talk to it from anywhere. Right-click the tray icon and choose Quit (or type `exit` in the chat window) to exit cleanly.
 
 The voice models load in the background at startup, so the window is usable right away — the very first F9 press may take a few extra seconds if they haven't finished loading.
 
@@ -200,24 +200,24 @@ In this mode, all output goes to dated log files in the `logs/` folder.
 
 ### Auto-launch at login (optional)
 
-To have Loki start automatically when you log into Windows:
+To have Nexus start automatically when you log into Windows:
 
 1. Press `Win+R`, type `taskschd.msc`, press Enter
 2. **Create Task** (not "Create Basic Task")
-3. **General**: Name "Loki", check "Run only when user is logged on"
+3. **General**: Name "Nexus", check "Run only when user is logged on"
 4. **Triggers**: New → At log on
-5. **Actions**: New → Start a program. Program: full path to your `pythonw.exe`. Arguments: full path to `assistant.py --tray`. Start in: the Loki folder.
+5. **Actions**: New → Start a program. Program: full path to your `pythonw.exe`. Arguments: full path to `assistant.py --tray`. Start in: the Nexus folder.
 6. **Settings**: "If the task fails, restart every 1 minute, up to 3 times"
 
 Log out and back in to verify it launches.
 
 ---
 
-## Using Loki
+## Using Nexus
 
 ### Voice commands
 
-Say **"Hey Loki"**, wait for the short chime, then say your command — or press and hold **F9**, speak, release. Examples:
+Say **"Hey Nexus"**, wait for the short chime, then say your command — or press and hold **F9**, speak, release. Examples:
 
 - "Open Spotify"
 - "Go to youtube.com on Chrome"
@@ -229,10 +229,10 @@ Say **"Hey Loki"**, wait for the short chime, then say your command — or press
 - "What's the speed of light?"
 - "Write a Python function to reverse a string"
 
-### Wake word ("Hey Loki")
+### Wake word ("Hey Nexus")
 
-- **How it works:** after the chime, just talk. Loki records until you stop for about a second, then transcribes and runs it. If you don't say anything within 5 seconds, it shows "(Didn't catch that.)". "Hey Loki, open Spotify" in one breath works too.
-- **Spoken replies:** say "voice on" to have Loki answer out loud. While Loki is talking (and while you hold F9), it ignores the wake word, so it can't wake itself up.
+- **How it works:** after the chime, just talk. Nexus records until you stop for about a second, then transcribes and runs it. If you don't say anything within 5 seconds, it shows "(Didn't catch that.)". "Hey Nexus, open Spotify" in one breath works too.
+- **Spoken replies:** say "voice on" to have Nexus answer out loud. While Nexus is talking (and while you hold F9), it ignores the wake word, so it can't wake itself up.
 - **On/off:** say or type `wake word off` / `wake word on`, or use **Wake word** in the tray menu. The choice is saved in `settings.json`. With it off, the microphone is only used while you hold F9.
 - **Everything stays on your PC.** The wake-word model listens locally and nothing is recorded or saved — only what you say *after* the wake word is transcribed, the same as F9.
 - **CPU use** is a few percent of one core.
@@ -254,31 +254,31 @@ These work in any mode and don't go through the LLM:
 | `clear fired`, `clean up` | Remove one-off reminders that have already fired |
 | `think on`, `thinking on` | Turn on thinking mode (see below) |
 | `think off`, `thinking off` | Turn off thinking mode |
-| `wake word on`, `start listening` | Listen for "Hey Loki" |
+| `wake word on`, `start listening` | Listen for "Hey Nexus" |
 | `wake word off`, `stop listening` | Stop listening (F9 still works) |
 
 ### Thinking mode
 
-Click **Think** next to the Send button (or say/type `think on`) and Loki reasons step by step before answering. It's much better at logic puzzles, multi-step math word problems, probability and "why" questions — but slower: expect roughly 10–45 seconds per reply instead of a few seconds. The status line says "Loki is reasoning…" while it works.
+Click **Think** next to the Send button (or say/type `think on`) and Nexus reasons step by step before answering. It's much better at logic puzzles, multi-step math word problems, probability and "why" questions — but slower: expect roughly 10–45 seconds per reply instead of a few seconds. The status line says "Nexus is reasoning…" while it works.
 
-- **Sticky:** it stays on until you click the button again (or say `think off`). It resets to off when Loki restarts.
+- **Sticky:** it stays on until you click the button again (or say `think off`). It resets to off when Nexus restarts.
 - **Only for chat and PDF questions** (and image questions, if the image model supports thinking — `qwen3-vl:8b-instruct` doesn't). Reminders, app launching, web search, system info, calculus, LaTeX conversion and the command router always run without thinking, so they stay fast.
 - **Greyed out?** The model picked in the **Model** dropdown doesn't support thinking. `qwen3:8b` does.
 - **See how it got there:** each answer has a collapsed **Show reasoning** section above it. Click to expand. The reasoning is saved with the chat history but never fed back to the model.
 
 ### Reminders
 
-Reminders persist in `assistant.db` (a SQLite file in the project folder). They survive restarts. If Loki was off when a reminder was due, it fires — popup included — when you next launch.
+Reminders persist in `assistant.db` (a SQLite file in the project folder). They survive restarts. If Nexus was off when a reminder was due, it fires — popup included — when you next launch.
 
 Reminders show a custom-styled popup in the bottom-right of your primary monitor that stays on top until you dismiss it. A sound plays alongside.
 
 Recurring reminders follow the calendar: monthly ones land on the same day each month (the 31st becomes the last day in shorter months), and a yearly Feb 29 reminder fires on Feb 28 in non-leap years.
 
-Spoken times are cleaned up automatically — Whisper often writes "nine twenty-seven p.m." as `9 27 pm` or `9.27 pm`, and Loki reads those as 9:27 PM.
+Spoken times are cleaned up automatically — Whisper often writes "nine twenty-seven p.m." as `9 27 pm` or `9.27 pm`, and Nexus reads those as 9:27 PM.
 
 ### Web search
 
-Loki opens search results for various services in your browser. No external API calls — it just constructs the right URL and lets your browser handle the search.
+Nexus opens search results for various services in your browser. No external API calls — it just constructs the right URL and lets your browser handle the search.
 
 - "open the map of Madison, Wisconsin" → Google Maps
 - "show me hotels near times square on maps" → Google Maps
@@ -309,11 +309,11 @@ Once attached, ask questions about it:
 - "What method did the authors use?"
 - "What's the error rate they report?"
 
-Loki uses local semantic search to find relevant sections, so it works on long documents. Type `detach` to unload the PDF.
+Nexus uses local semantic search to find relevant sections, so it works on long documents. Type `detach` to unload the PDF.
 
 **Note:** PDF question-answering is a research aid, not an authoritative source. The local model can occasionally misread specific numbers or miss details, especially in dense technical papers. Always verify exact values against the original document.
 
-Scanned PDFs (images of pages, with no text layer) aren't supported — Loki will tell you if a PDF has no extractable text. Screenshot the page and attach it as an image instead.
+Scanned PDFs (images of pages, with no text layer) aren't supported — Nexus will tell you if a PDF has no extractable text. Screenshot the page and attach it as an image instead.
 
 ### Working with images
 
@@ -338,13 +338,13 @@ The image and your question go straight to the model in the **Images** dropdown 
 
 8B vision models are very good at transcribing text and equations but unreliable at reasoning about diagrams: a hand-drawn circuit, for example, is often read with the wrong connections. Use them to type things out, and do the reasoning yourself (or with the main model on the transcribed text). Bigger vision models handle diagrams much better if you upgrade your GPU — pull one and pick it from the dropdown.
 
-The vision model and `qwen3:8b` don't fit in 8 GB of VRAM together, so the vision model unloads as soon as it's done. Each image takes a few extra seconds while it loads (the status line says "Loki is looking…").
+The vision model and `qwen3:8b` don't fit in 8 GB of VRAM together, so the vision model unloads as soon as it's done. Each image takes a few extra seconds while it loads (the status line says "Nexus is looking…").
 
 **Note:** like PDF answers, image answers are a research aid. Double-check numbers read off plots — small vision models estimate them, and can be off by a gridline.
 
 ### Converting to LaTeX
 
-Paste text or describe an equation and ask Loki to convert it:
+Paste text or describe an equation and ask Nexus to convert it:
 
 - "convert to latex: the integral from 0 to infinity of x squared e to the minus x dx"
 - "latex this inline: alpha squared plus beta squared"
@@ -364,21 +364,21 @@ Ask about your computer's current status:
 - "How long has my PC been on?"
 - "What's my local IP?"
 
-Loki gathers the data locally and answers in plain language. It interprets the numbers too — asking "am I running low on memory?" gets a judgment, not just a percentage.
+Nexus gathers the data locally and answers in plain language. It interprets the numbers too — asking "am I running low on memory?" gets a judgment, not just a percentage.
 
 ### Quick calculations
 
-Type a pure arithmetic expression and Loki evaluates it instantly without involving the language model:
+Type a pure arithmetic expression and Nexus evaluates it instantly without involving the language model:
 
 - `27 * 4500 * 0.27`
 - `sqrt(2) + pi`
 - `2^10`
 
-Supported functions include sqrt, sin, cos, tan, log, ln, exp, abs, round, floor, ceil, factorial, and constants pi, e, tau. For word-based math questions ("what's the molar mass of glucose?"), Loki uses the language model instead.
+Supported functions include sqrt, sin, cos, tan, log, ln, exp, abs, round, floor, ceil, factorial, and constants pi, e, tau. For word-based math questions ("what's the molar mass of glucose?"), Nexus uses the language model instead.
 
 ### Symbolic calculus
 
-Loki does exact symbolic math via SymPy:
+Nexus does exact symbolic math via SymPy:
 
 - `integrate x^2`
 - `integrate x*exp(x) from 0 to 1` (definite)
@@ -404,9 +404,9 @@ In tray mode, left-click the tray icon to open the chat window. Features:
 - Select text and right-click → Copy (or `Ctrl+C`) to copy any part of the conversation
 - Type and press Enter to send (Send button works too)
 - Drag a PDF onto the window to attach it; paste (`Ctrl+V`) or drag an image to ask about it
-- **Model** and **Images** dropdowns at the top pick which installed Ollama models Loki uses (see below)
+- **Model** and **Images** dropdowns at the top pick which installed Ollama models Nexus uses (see below)
 - Last 50 messages from disk are restored (with math rendered) when you reopen the window
-- Close the window with X to hide it (Loki keeps running in tray)
+- Close the window with X to hide it (Nexus keeps running in tray)
 - Conversation history is saved to `chat_history.jsonl` (rolling last ~1000 messages)
 
 The conversation area is a small local web page (`web/chat.html`) shown inside the window. Nothing is loaded from the internet.
@@ -422,13 +422,23 @@ Your choice is saved in `settings.json` and kept across restarts. To try a new m
 
 ---
 
-## Training the "Hey Loki" wake word
+## Training the "Hey Nexus" wake word
 
-openWakeWord has no ready-made "Hey Loki", so you train one, once, with the notebook `wakeword/loki_wakeword_training.ipynb`. It generates tens of thousands of synthetic voices saying your phrase, mixes them with noise, room echo and your own room's sound, and trains a small model. All that comes back is a ~200 KB file, `hey_loki.onnx`; after that everything is offline.
+openWakeWord has no ready-made "Hey Nexus", so you train one, once, with the notebook `wakeword/wakeword_training.ipynb`. It generates tens of thousands of synthetic voices saying the phrase, adds recordings of **your own voice**, mixes them with noise, room echo and your room's sound, and trains a small model. All that comes back is a ~200 KB file, `hey_nexus.onnx`; after that everything is offline.
 
-The notebook runs on **Google Colab** (free T4 GPU) or on **your own PC** with an NVIDIA GPU, through WSL2. The first run takes roughly 3–5 hours on a T4, mostly generating the clips. Retrains after that take under an hour, because the clips are reused.
+The notebook runs on **Google Colab** (free T4 GPU) or on **your own PC** with an NVIDIA GPU, through WSL2. The first run takes roughly 2.5–5 hours on a T4, mostly generating the clips. Retrains after that take under an hour, because the clips are reused.
 
-### 1. Record your room (recommended)
+### 1. Record your voice (recommended)
+
+```bash
+python wakeword_tools.py myvoice
+```
+
+About 10 minutes: you say "Hey Nexus" about 60 times, once after each beep, in six rounds — normally, quickly, slowly, quietly, from a few feet away, and casually. Use the mic you'll normally talk into. Clips where it didn't hear you are retaken automatically. Output: `wakeword/my_voice.zip`.
+
+The synthetic voices have never heard your accent or how you actually say the phrase in passing; these recordings teach the model exactly that, and are the most effective fix for missed wake-ups.
+
+### 2. Record your room (recommended)
 
 ```bash
 python wakeword_tools.py noise 20
@@ -436,47 +446,47 @@ python wakeword_tools.py noise 20
 
 Records 20 minutes of your room's usual sound in 10-second clips — leave on the fan, music, keyboard typing, a video call, whatever you normally have going (just don't say the wake word). Training mixes these under the wake-word clips, so the model learns to ignore exactly the noise it will hear at your desk. Output: `wakeword/my_room_noise.zip`.
 
-### 2. Run the notebook
+### 3. Run the notebook
 
-**On Colab:** go to [colab.research.google.com](https://colab.research.google.com), **File → Upload notebook**, pick `wakeword/loki_wakeword_training.ipynb`, then **Runtime → Change runtime type → T4 GPU** (not a TPU). Run the cells top to bottom:
+**On Colab:** go to [colab.research.google.com](https://colab.research.google.com), **File → Upload notebook**, pick `wakeword/wakeword_training.ipynb`, then **Runtime → Change runtime type → T4 GPU** (not a TPU). Run the cells top to bottom:
 
-- **Cell 1:** settings. The defaults are the ones that worked: phrase `hey lowkee` (spelled so the synthetic voices say it the way you do), 50,000 examples, penalty 1000. Leave `save_to_drive` on: it keeps a checkpoint in your Google Drive, so a disconnect or Colab's session time limit doesn't cost you the hours of clip generation.
+- **Cell 1:** settings. The defaults are the ones that worked: phrase `hey nexus`, 50,000 examples, penalty 1000, and each of your recordings used 40 times. Leave `save_to_drive` on: it keeps a checkpoint in your Google Drive, so a disconnect or Colab's session time limit doesn't cost you the hours of clip generation.
 - **Cells 2–4:** setup and about 16 GB of downloads. Each checks itself and stops with a clear message if something went wrong; re-running resumes.
-- **Cell 5** asks for `my_room_noise.zip`.
-- **Cell 7:** listen. If the voices don't say it like you, change the spelling in cell 1.
+- **Cell 5** asks for `my_voice.zip`, then `my_room_noise.zip`.
+- **Cell 7:** listen to the synthetic voices. If they don't say it like you, change the spelling in cell 1.
 - **Cell 8** trains, with all output visible.
-- **Cell 9** downloads `hey_lowkee.onnx`.
+- **Cell 9** downloads `hey_nexus.onnx`.
 
-**On your own PC:** the bottom of the notebook explains the one-time WSL2 + Jupyter setup. Locally there's no time limit, files stay on disk between runs, and cell 9 can copy the model straight into Loki's folder.
+**On your own PC:** the bottom of the notebook explains the one-time WSL2 + Jupyter setup. Locally there's no time limit, files stay on disk between runs, and cell 9 can copy the model straight into the assistant's folder.
 
-### 3. Bring the model home
+### 4. Bring the model home
 
-Rename the file to `hey_loki.onnx`, put it in Loki's `wakeword/` folder, and restart Loki. The startup message about "Hey Jarvis" goes away. Check it with the live meter:
+Put `hey_nexus.onnx` in the `wakeword/` folder and restart Nexus. The startup message about "Hey Jarvis" goes away. Check it with the live meter:
 
 ```bash
 python wakeword_tools.py test
 ```
 
-Say the wake word at your desk, from across the room, and with music on. Then talk normally, and say "lucky", "Loki" on its own and "low key" — those should stay low. Saying just "Loki" without "hey" doesn't wake it, by design: training treats partial phrases as non-matches, which avoids false wake-ups from TV and conversation.
+Say the wake word at your desk, from across the room, and with music on. Then talk normally, and say "Lexus", "Texas", "hey Alexa" and "Nexus" on its own — those should stay low. Saying just "Nexus" without "hey" doesn't wake it, by design: training treats partial phrases as non-matches, which avoids false wake-ups from TV and conversation.
 
-### 4. Too strict or too jumpy? Retrain
+### 5. Too strict or too jumpy? Retrain
 
 The **penalty** in cell 1 (`false_activation_penalty`) is the main knob: how hard training punishes false wake-ups.
 
-- **Too strict** (misses you, needs a loud voice): lower it. 2000 came out too strict; 1000 is openWakeWord's default; try 500 if 1000 is still sluggish.
-- **Too jumpy** (wakes up on its own): raise it, or train the voice verifier (step 5).
+- **Too strict** (misses you, needs a loud voice): lower it. 2000 came out too strict for the first wake word; 1000 is openWakeWord's default; try 500 if 1000 is still sluggish.
+- **Too jumpy** (wakes up on its own): raise it, or train the voice verifier (step 6).
 
-Change it, then re-run cells 1, 6 and 8 in the same session. In a new Colab session, run all the cells; cell 8 restores the clips from your Drive checkpoint and goes straight to training. Each new model is also saved to Drive with its penalty in the name, and the previous one is kept, so you can compare.
+Change it, then re-run cells 1, 6 and 8 in the same session. In a new Colab session, run all the cells; cell 8 restores the clips from your Drive checkpoint and goes straight to training. Each new model is also saved to Drive with its penalty in the name, and the previous one is kept, so you can compare. Recorded more of your voice? Upload the new `my_voice.zip` in cell 5 and cell 8 redoes the features to include them.
 
 The training summary prints a **recall** (the share of hard, noisy test clips it caught; aim above about 0.5) and **false positives per hour** (aim under about 0.5). These numbers are a guide; the live meter with your own voice is what counts.
 
-### 5. Teach it your voice (optional)
+### 6. Teach it your voice (optional)
 
 ```bash
 python wakeword_tools.py verifier
 ```
 
-Takes 2 minutes: you say the wake word 6 times and read 3 sentences. It trains a small extra check (`wakeword/hey_loki_verifier.pkl`) that only lets wake-ups through when it's **your** voice — the most effective way to stop false wake-ups from TV, YouTube and other people. The trade-off: Loki won't answer anyone else. Delete the file to undo.
+Takes 2 minutes: you say the wake word 6 times and read 3 sentences. It trains a small extra check (`wakeword/hey_nexus_verifier.pkl`) that only lets wake-ups through when it's **your** voice — the most effective way to stop false wake-ups from TV, YouTube and other people. The trade-off: Nexus won't answer anyone else. Delete the file to undo.
 
 ### Tuning
 
@@ -485,25 +495,26 @@ At the top of `wakeword.py`:
 | Setting | Default | Change it when |
 |---|---|---|
 | `THRESHOLD` | `0.5` | Raise to `0.6`–`0.7` if it wakes up when it shouldn't; lower to `0.4` if it misses you |
-| `PATIENCE` | `2` | Raise to `3` for fewer random wake-ups (needs a slightly longer, clearer "hey loki") |
+| `PATIENCE` | `2` | Raise to `3` for fewer random wake-ups (needs a slightly longer, clearer "hey nexus") |
 | `VAD_THRESHOLD` | `0.5` | Only wake up while someone is actually speaking. Keep it on |
 | `AUTO_GAIN` | `True` | Boosts quiet, distant speech for that voice check (steady noise is never boosted). Without it, speech from across the room is often ignored |
-| `END_SILENCE` | `0.9` s | Raise if Loki cuts you off mid-sentence when you pause to think |
+| `END_SILENCE` | `0.9` s | Raise if Nexus cuts you off mid-sentence when you pause to think |
 | `MIC_DEVICE` | `None` | Set to a microphone's name or number if the default isn't the one you talk into |
 
-The live meter (`wakeword_tools.py test`) scores audio exactly the way Loki does. Each line shows the wake-word **score**, the **mic** loudness and how much it's being boosted, and the **voice** check. If the score is high but nothing wakes, the voice check is the problem; if the mic level stays around -50 dB while you talk, the microphone is too quiet (see troubleshooting).
+The live meter (`wakeword_tools.py test`) scores audio exactly the way Nexus does. Each line shows the wake-word **score**, the **mic** loudness and how much it's being boosted, and the **voice** check. If the score is high but nothing wakes, the voice check is the problem; if the mic level stays around -50 dB while you talk, the microphone is too quiet (see troubleshooting).
 
 ---
 
 ## Project structure
 
 ```text
-LokiAIAssistant/
+AIAssistant/
 ├── assistant.py            # Main entry point: routing, all features, the three run modes
 ├── chat_window.py          # PySide6 chat window, reminder popup
 ├── tray.py                 # System tray icon
+├── app_info.py             # The assistant's name and wake phrase
 ├── voice.py                # Whisper (STT) and Piper (TTS)
-├── wakeword.py             # "Hey Loki" listener (openWakeWord)
+├── wakeword.py             # "Hey Nexus" listener (openWakeWord)
 ├── wakeword_tools.py       # Wake word setup, live test meter, room-noise recorder, voice verifier
 ├── db.py                   # SQLite for reminders
 ├── reminders.py            # Reminder scheduler (fires the popup via assistant.py)
@@ -529,7 +540,7 @@ LokiAIAssistant/
 ├── chat_images/            # Copies of images you've attached (auto-created)
 ├── AI_Icon.png             # Tray and window icon
 ├── voices/                 # Piper voice files (you download these)
-├── wakeword/               # hey_loki.onnx (you train it), training notebook, voice verifier, room noise
+├── wakeword/               # hey_nexus.onnx (you train it), training notebook, your recordings, voice verifier
 ├── logs/                   # Daily log files in tray mode (auto-created)
 ├── .gitattributes          # Line-ending rules (keeps web/vendor/ byte-exact)
 └── requirements.txt
@@ -570,11 +581,11 @@ In `assistant.py`, change `VOICE_HOTKEY = "f9"` to whatever you prefer. Examples
 
 ### Spoken replies on by default
 
-Voice output is off by default — replies are text only. To have Loki speak by default, set `VOICE_OUTPUT = True` near the top of `assistant.py`. You can also toggle it any time with the "voice on" / "voice off" commands or from the tray menu.
+Voice output is off by default — replies are text only. To have Nexus speak by default, set `VOICE_OUTPUT = True` near the top of `assistant.py`. You can also toggle it any time with the "voice on" / "voice off" commands or from the tray menu.
 
 ### Change the chat window's look
 
-All colors, fonts and spacing are variables at the top of `web/chat.css` — for example `--bg` (background), `--label-user` (the "you:" color), `--code-radius` (set to `8px` for rounded code blocks), and `--font-size`. Edit, save, and restart Loki. No Python changes needed.
+All colors, fonts and spacing are variables at the top of `web/chat.css` — for example `--bg` (background), `--label-user` (the "you:" color), `--code-radius` (set to `8px` for rounded code blocks), and `--font-size`. Edit, save, and restart Nexus. No Python changes needed.
 
 The chat uses Google Sans for text and Google Sans Code for code (bundled in `web/vendor/fonts/`, so they work offline). To use a different font, put any installed font's name first in `--font` or `--font-mono`, e.g. `"Inter"` or `"Segoe UI"`. Math always uses KaTeX's own fonts.
 
@@ -584,14 +595,14 @@ Replace `AI_Icon.png` with your own 256×256 PNG (transparent background, high c
 
 ### Optional configuration
 
-Loki includes example config files. To use them, copy and edit:
+Nexus includes example config files. To use them, copy and edit:
 
 ```bash
 copy manual_apps.json.example manual_apps.json
 copy latex_preferences.md.example latex_preferences.md
 ```
 
-Then edit the copies with your own app paths and LaTeX style. Both files are optional — Loki works without them.
+Then edit the copies with your own app paths and LaTeX style. Both files are optional — Nexus works without them.
 
 ---
 
@@ -604,7 +615,7 @@ If you don't have a GPU or have less than 8 GB VRAM:
 - **Run Whisper on CPU**: in `voice.py`, set `WHISPER_DEVICE = "cpu"` and `WHISPER_COMPUTE_TYPE = "int8"`
 - **Use the smallest Whisper model**: in `voice.py`, set `WHISPER_MODEL_SIZE = "base.en"` (less accurate) or `"tiny.en"` (least accurate, fastest)
 
-Loki will still work on a midrange laptop with no dedicated GPU — just slower.
+Nexus will still work on a midrange laptop with no dedicated GPU — just slower.
 
 ---
 
@@ -612,17 +623,17 @@ Loki will still work on a midrange laptop with no dedicated GPU — just slower.
 
 ### "Already running (PID ...). Exiting."
 
-A previous instance is still running. Check your system tray for the Loki icon and right-click → Quit. If the tray icon isn't visible, open Task Manager → Details, find `python.exe` or `pythonw.exe` with that PID, and end it.
+A previous instance is still running. Check your system tray for the Nexus icon and right-click → Quit. If the tray icon isn't visible, open Task Manager → Details, find `python.exe` or `pythonw.exe` with that PID, and end it.
 
-Loki ignores leftover lock files from a crash automatically (it checks that the PID really is a Python process). If it still refuses to start, delete `%TEMP%\loki_assistant.lock`.
+Nexus ignores leftover lock files from a crash automatically (it checks that the PID really is a Python process). If it still refuses to start, delete `%TEMP%\nexus_assistant.lock`.
 
 ### Reminder popup doesn't appear
 
-The popup needs Loki running in tray mode (in text/voice mode, reminders fall back to printed text in the terminal).
+The popup needs Nexus running in tray mode (in text/voice mode, reminders fall back to printed text in the terminal).
 
 ### Chat shows plain text instead of formatted replies and math
 
-The bundled libraries in `web/vendor/` are missing — the chat window shows a notice when this happens. Run `python setup_web_assets.py` once and restart Loki.
+The bundled libraries in `web/vendor/` are missing — the chat window shows a notice when this happens. Run `python setup_web_assets.py` once and restart Nexus.
 
 ### "Embedding failed ... Run: ollama pull nomic-embed-text"
 
@@ -634,15 +645,15 @@ Usually Ollama isn't running. Start it (open the Ollama app, or run `ollama serv
 
 ### "Couldn't understand the time"
 
-Loki uses `dateparser` for natural-language times. It handles most phrasings but occasionally trips on unusual ones. Try rephrasing: "in 30 minutes" instead of "in a half hour"; "tomorrow at 5pm" instead of "five tomorrow."
+Nexus uses `dateparser` for natural-language times. It handles most phrasings but occasionally trips on unusual ones. Try rephrasing: "in 30 minutes" instead of "in a half hour"; "tomorrow at 5pm" instead of "five tomorrow."
 
 ### "Wake word unavailable" at startup
 
-openWakeWord or its base models are missing. Run `pip install openwakeword` and `python wakeword_tools.py setup`, then restart Loki. If the message mentions an audio device, check that Windows has a default microphone (Settings → System → Sound → Input), or set `MIC_DEVICE` in `wakeword.py`.
+openWakeWord or its base models are missing. Run `pip install openwakeword` and `python wakeword_tools.py setup`, then restart Nexus. If the message mentions an audio device, check that Windows has a default microphone (Settings → System → Sound → Input), or set `MIC_DEVICE` in `wakeword.py`.
 
-### "Hey Loki" doesn't respond, or wakes up on its own
+### "Hey Nexus" doesn't respond, or wakes up on its own
 
-Loki logs every attempt that came close but didn't wake, with the reason. After a day or two of normal use, run:
+Nexus logs every attempt that came close but didn't wake, with the reason. After a day or two of normal use, run:
 
 ```bash
 python wakeword_tools.py misses
@@ -650,9 +661,9 @@ python wakeword_tools.py misses
 
 It counts wake-ups and near misses, shows why the misses failed (score too low, too brief, or blocked by the voice check), and suggests the setting to change. If most misses scored well under the threshold, the model doesn't recognize the way you say the phrase, and retraining with your own voice is the fix.
 
-To watch live, run `python wakeword_tools.py test`. If your "hey loki" peaks below the threshold, lower `THRESHOLD` (or move the mic closer); if other sounds cross it, raise `THRESHOLD` or `PATIENCE`, record more room noise and retrain, or train the voice verifier. See **Tuning** in the wake word training section.
+To watch live, run `python wakeword_tools.py test`. If your "hey nexus" peaks below the threshold, lower `THRESHOLD` (or move the mic closer); if other sounds cross it, raise `THRESHOLD` or `PATIENCE`, record more room noise and retrain, or train the voice verifier. See **Tuning** in the wake word training section.
 
-### "Hey Loki" only works up close, or not with the laptop's microphone
+### "Hey Nexus" only works up close, or not with the laptop's microphone
 
 Most of this is the microphone's level and distance:
 
@@ -661,7 +672,7 @@ Most of this is the microphone's level and distance:
 - **Distance is hard for a laptop mic.** Smart speakers use several microphones to hear across a room. From 5–6 feet, a laptop's built-in mic works only in a quiet room with the boost on; a USB conference microphone ("speakerphone" style, made for picking up a room) makes far-away use reliable.
 - **Retrain for the mic you'll use.** If you mostly talk to the laptop mic from a distance, record room noise with that mic (`python wakeword_tools.py noise 20` with the earphones unplugged) and retrain.
 
-Loki follows Windows' default microphone: plug or unplug earphones and it switches within a few seconds (the log says `[WAKE] microphone: ...`). This needs `pycaw` (`pip install pycaw`). Without it, Loki still recovers when a mic stops working, but doesn't notice a newly plugged-in one.
+Nexus follows Windows' default microphone: plug or unplug earphones and it switches within a few seconds (the log says `[WAKE] microphone: ...`). This needs `pycaw` (`pip install pycaw`). Without it, Nexus still recovers when a mic stops working, but doesn't notice a newly plugged-in one.
 
 ### Voice transcription is inaccurate
 
@@ -701,7 +712,7 @@ Images take about 1,000 tokens of the model's context window. Raise `OLLAMA_CONT
 
 ### LLM responses are very slow
 
-First call after Loki sits idle is slow because the model has to load into VRAM. Subsequent calls are fast. Set `OLLAMA_KEEP_ALIVE=2h` in your environment to keep it loaded longer.
+First call after Nexus sits idle is slow because the model has to load into VRAM. Subsequent calls are fast. Set `OLLAMA_KEEP_ALIVE=2h` in your environment to keep it loaded longer.
 
 If responses are consistently slow even after warmup, the model is probably running on CPU because VRAM is full. Close other GPU-heavy applications (browsers with hardware acceleration count), or run `ollama ps` to see the model's status.
 
@@ -717,14 +728,14 @@ Everything runs locally:
 - Reminders are stored in a local SQLite file
 - Conversation history is in a local file
 - Images you attach are read by the local vision model; copies are kept in `chat_images/` so the chat history can show them. Delete that folder any time.
-- With the wake word on, the microphone is open all the time, but the audio is only scored locally for "Hey Loki" and thrown away — nothing is recorded or saved until after the wake word. Say `wake word off` to close the mic except while you hold F9.
+- With the wake word on, the microphone is open all the time, but the audio is only scored locally for "Hey Nexus" and thrown away — nothing is recorded or saved until after the wake word. Say `wake word off` to close the mic except while you hold F9.
 
-The only network connections Loki makes are:
+The only network connections Nexus makes are:
 - To `127.0.0.1:11434` (Ollama, on your own machine) — never leaves your machine
 - The initial download of the model and Whisper model files from their respective servers (one-time)
 
 Two things involve the internet only when you ask for them:
-- **Web search** opens a search page in your browser — the same as typing the search yourself. Loki doesn't call any search API.
+- **Web search** opens a search page in your browser — the same as typing the search yourself. Nexus doesn't call any search API.
 - **`setup_web_assets.py`** downloads KaTeX and marked from the npm registry — only if you run it. Both are already bundled, so normally you never will.
 
 The chat window loads nothing from the internet; markdown and math are rendered by the bundled libraries.
@@ -741,7 +752,7 @@ Add your preferred license here (MIT is a reasonable default for personal projec
 
 ## Acknowledgments
 
-Loki is built on top of excellent open-source projects:
+Nexus is built on top of excellent open-source projects:
 
 - [Ollama](https://ollama.com) for local LLM hosting
 - [Qwen](https://github.com/QwenLM/Qwen3) for the language model, and [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL) for the vision model
@@ -753,4 +764,4 @@ Loki is built on top of excellent open-source projects:
 - [marked](https://marked.js.org) for markdown rendering
 - [SymPy](https://www.sympy.org) for symbolic calculus
 - [pdfplumber](https://github.com/jsvine/pdfplumber) for PDF text extraction
-- [openWakeWord](https://github.com/dscripka/openWakeWord) for the "Hey Loki" wake word, with Silero VAD; the training notebook builds on its automatic training notebook and the Colab fixes in [PR #359](https://github.com/dscripka/openWakeWord/pull/359)
+- [openWakeWord](https://github.com/dscripka/openWakeWord) for the "Hey Nexus" wake word, with Silero VAD; the training notebook builds on its automatic training notebook and the Colab fixes in [PR #359](https://github.com/dscripka/openWakeWord/pull/359)
