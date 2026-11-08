@@ -49,6 +49,8 @@ NO_SPEECH_TIMEOUT = 5.0  # give up if you don't start talking within this
 MAX_COMMAND = 15.0       # longest command recorded
 MIC_DEVICE = None        # None = follow Windows' default microphone; or a device index/name
 
+NEAR_MISS = 0.2         # log attempts that peaked above this but didn't wake (see `wakeword_tools.py misses`)
+
 STALL_SECONDS = 2.0      # no audio for this long = mic unplugged/asleep → reopen it
 DEVICE_CHECK_SECONDS = 3.0   # how often to check whether Windows' default mic changed
 RETRY_SECONDS = 5.0      # retry interval when no microphone can be opened
@@ -162,9 +164,10 @@ class WakeScorer:
         self.speech.clear()
 
     def __call__(self, frame):
-        """Returns (score, boosted_frame, speech_probability)."""
+        """Returns (score, boosted_frame, speech_probability).
+        self.raw is the score before the voice check."""
         boosted = self.gain(frame) if AUTO_GAIN else frame
-        score = float(self.model.predict(frame)[self.name])
+        score = self.raw = float(self.model.predict(frame)[self.name])
         speech = float(self.vad.predict(boosted, frame_size=640))
         self.speech.append(speech)
         if VAD_THRESHOLD > 0:
@@ -174,6 +177,40 @@ class WakeScorer:
             if not window or max(window) < VAD_THRESHOLD:
                 score = 0.0
         return score, boosted, speech
+
+
+class _MissTracker:
+    """Notices attempts that came close but didn't wake, and logs why, e.g.
+    "[WAKE] near miss: peak 0.42 — score below threshold 0.5". After some
+    normal use, `python wakeword_tools.py misses` summarizes them."""
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.peak, self.frames_above, self.blocked, self.quiet = 0.0, 0, False, 0
+
+    def update(self, raw, gated, above):
+        if raw >= NEAR_MISS:
+            self.peak = max(self.peak, raw)
+            self.quiet = 0
+            if raw >= THRESHOLD:
+                self.frames_above = max(self.frames_above, above if gated >= THRESHOLD else 1)
+                self.blocked |= gated < THRESHOLD
+            return
+        if self.peak == 0:
+            return
+        self.quiet += 1
+        if self.quiet < 6:                      # wait ~0.5 s after the attempt ends
+            return
+        if self.peak < THRESHOLD:
+            reason = f"score below threshold {THRESHOLD}"
+        elif self.blocked:
+            reason = "blocked by the voice check"
+        else:
+            reason = f"only {self.frames_above} frame(s) above {THRESHOLD}, needs {PATIENCE}"
+        print(f"[WAKE] near miss: peak {self.peak:.2f} — {reason}", flush=True)
+        self.clear()
 
 
 class WakeWordListener:
@@ -296,6 +333,7 @@ class WakeWordListener:
         except Exception:
             pass
         was_busy, above, last_audio, next_check = False, 0, time.monotonic(), 0.0
+        miss = _MissTracker()
         while self._running:
             now = time.monotonic()
             if self._stream is None:
@@ -326,6 +364,7 @@ class WakeWordListener:
                 continue
             if was_busy:
                 was_busy, above = False, 0
+                miss.clear()
                 self._drain()
                 continue
 
@@ -333,11 +372,13 @@ class WakeWordListener:
             # own patience= option never fires (it checks scores it has zeroed).
             score, _, _ = self._scorer(frame)
             above = above + 1 if score >= THRESHOLD else 0
+            miss.update(self._scorer.raw, score, above)
             if above < PATIENCE:
                 continue
             above = 0
 
-            print(f"[WAKE] heard wake word (score {score:.2f})", flush=True)
+            print(f"[WAKE] heard wake word (score {score:.2f}, peak {miss.peak:.2f})", flush=True)
+            miss.clear()
             _chime()
             try:
                 self.on_wake()

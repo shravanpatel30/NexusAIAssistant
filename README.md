@@ -642,7 +642,15 @@ openWakeWord or its base models are missing. Run `pip install openwakeword` and 
 
 ### "Hey Loki" doesn't respond, or wakes up on its own
 
-Run `python wakeword_tools.py test` and watch the scores. If your "hey loki" peaks below the threshold, lower `THRESHOLD` (or move the mic closer); if other sounds cross it, raise `THRESHOLD` or `PATIENCE`, record more room noise and retrain, or train the voice verifier. See **Tuning** in the wake word training section.
+Loki logs every attempt that came close but didn't wake, with the reason. After a day or two of normal use, run:
+
+```bash
+python wakeword_tools.py misses
+```
+
+It counts wake-ups and near misses, shows why the misses failed (score too low, too brief, or blocked by the voice check), and suggests the setting to change. If most misses scored well under the threshold, the model doesn't recognize the way you say the phrase, and retraining with your own voice is the fix.
+
+To watch live, run `python wakeword_tools.py test`. If your "hey loki" peaks below the threshold, lower `THRESHOLD` (or move the mic closer); if other sounds cross it, raise `THRESHOLD` or `PATIENCE`, record more room noise and retrain, or train the voice verifier. See **Tuning** in the wake word training section.
 
 ### "Hey Loki" only works up close, or not with the laptop's microphone
 

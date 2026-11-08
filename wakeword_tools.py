@@ -4,6 +4,7 @@
     python wakeword_tools.py test       live meter: see the score as you talk, to tune THRESHOLD
     python wakeword_tools.py noise 20   record 20 min of your room's usual sounds for training
     python wakeword_tools.py verifier   optional: teach the wake word your voice
+    python wakeword_tools.py misses     after some use: why "Hey Loki" didn't wake
 
 See the README's "Wake word" section for the whole process.
 """
@@ -178,8 +179,70 @@ def verifier():
           f"Delete that file to go back to answering anyone.")
 
 
+# ---------------------------------------------------------------- misses
+def misses():
+    """Summarize wake-ups and near misses from Loki's logs (logs/log_*.txt)."""
+    import re
+    from collections import Counter
+    wakes, near, old_wakes = [], [], 0
+    for log in sorted((Path(__file__).parent / "logs").glob("log_*.txt")):
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            if m := re.search(r"\[WAKE\] heard wake word \(score [\d.]+, peak ([\d.]+)", line):
+                wakes.append(float(m.group(1)))
+            elif "[WAKE] heard wake word" in line:
+                old_wakes += 1                       # from before near misses were logged
+            elif m := re.search(r"\[WAKE\] near miss: peak ([\d.]+) — (.+)", line):
+                near.append((float(m.group(1)), m.group(2)))
+    if not wakes and not near:
+        sys.exit("No wake-word activity logged yet (or only from before near-miss logging). "
+                 "Use Loki for a while in tray mode, then run this again.")
+    print(f"Since near-miss logging started:  wake-ups {len(wakes)}   near misses {len(near)}")
+    if old_wakes:
+        print(f"(plus {old_wakes} earlier wake-ups, not counted: there's no record of misses from then)")
+    print()
+    if wakes:
+        print(f"Wake-up peak scores: median {np.median(wakes):.2f}, lowest {min(wakes):.2f}")
+    if not near:
+        print("No near misses. If it still feels like it misses you, those attempts scored under "
+              f"{wakeword.NEAR_MISS} (not logged): the model isn't reacting to the way you say it, "
+              "and retraining with your own voice is the fix.")
+        return
+    reasons = Counter("score too low" if r.startswith("score below") else
+                      "voice check" if "voice check" in r else "too brief" for _, r in near)
+    print("Near misses by reason:")
+    for reason, n in reasons.most_common():
+        print(f"  {reason:14} {n}")
+    low = sorted(p for p, r in near if r.startswith("score below"))
+    if low:
+        buckets = Counter(min(int(p * 10), 9) for p in low)
+        print("\nPeak scores of the 'too low' misses:")
+        for b in range(2, 10):
+            if buckets[b]:
+                print(f"  {b / 10:.1f}-{(b + 1) / 10:.1f}  {'█' * buckets[b]} {buckets[b]}")
+    print()
+    if len(near) < 8:
+        print(f"Only {len(near)} near misses so far — too few to recommend a change. "
+              f"Keep using it and run this again in a day or two.")
+    else:
+        top = reasons.most_common(1)[0][0]
+        if top == "score too low":
+            n_close = sum(1 for p in low if p >= wakeword.THRESHOLD - 0.15)
+            if n_close >= len(low) / 2:
+                print(f"Most misses landed just under the threshold: try THRESHOLD = "
+                      f"{wakeword.THRESHOLD - 0.1:.1f} in wakeword.py.")
+            else:
+                print("Most misses scored well under the threshold: the model doesn't recognize the way "
+                      "you say it. Retraining with recordings of your own voice fixes this best.")
+        elif top == "voice check":
+            print("The voice check is blocking real attempts: try VAD_THRESHOLD = 0.3 in wakeword.py.")
+        else:
+            print("Attempts reached the threshold only briefly: try PATIENCE = 1 in wakeword.py.")
+    print(f"\n(Near misses can include ordinary speech that happened to score above {wakeword.NEAR_MISS}, "
+          f"and attempts under {wakeword.NEAR_MISS} aren't logged at all; the counts are a guide.)")
+
+
 if __name__ == "__main__":
-    commands = {"setup": setup, "test": test, "noise": noise, "verifier": verifier}
+    commands = {"setup": setup, "test": test, "noise": noise, "verifier": verifier, "misses": misses}
     if len(sys.argv) < 2 or sys.argv[1] not in commands:
         print(__doc__)
         sys.exit(1)
