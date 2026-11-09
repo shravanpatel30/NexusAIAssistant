@@ -55,8 +55,8 @@ All run locally through Ollama. Pull them during setup. You can switch models an
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/shravanpatel30/NexusAIAssistant.git
-cd NexusAIAssistant
+git clone https://github.com/shravanpatel30/LokiAIAssistant.git
+cd LokiAIAssistant
 ```
 
 ### 2. Install Python dependencies
@@ -428,15 +428,20 @@ openWakeWord has no ready-made "Hey Nexus", so you train one, once, with the not
 
 The notebook runs on **Google Colab** (free T4 GPU) or on **your own PC** with an NVIDIA GPU, through WSL2. The first run takes roughly 2.5–5 hours on a T4, mostly generating the clips. Retrains after that take under an hour, because the clips are reused.
 
-### 1. Record your voice (recommended)
+### 1. Record your voice (optional)
 
 ```bash
 python wakeword_tools.py myvoice
 ```
 
-About 10 minutes: you say "Hey Nexus" about 60 times, once after each beep, in six rounds — normally, quickly, slowly, quietly, from a few feet away, and casually. Use the mic you'll normally talk into. Clips where it didn't hear you are retaken automatically. Output: `wakeword/my_voice.zip`.
+About 10 minutes: you say "Hey Nexus" about 75 times, at your own pace with a short pause after each, in two parts:
 
-The synthetic voices have never heard your accent or how you actually say the phrase in passing; these recordings teach the model exactly that, and are the most effective fix for missed wake-ups.
+1. **Your usual mic (earphones):** normally, quickly, slowly, quietly, and casually.
+2. **The laptop's built-in mic** (it asks you to unplug the earphones): at the laptop, from 3–6 feet away, and from across the room.
+
+The mic stays open for each round, the way a normal recorder works, and each phrase is cut out automatically as you say it. A lone "hey" or a whole sentence is skipped with a hint. After each round you can play the clips back and redo the round if they don't sound right. Output: `wakeword/my_voice.zip`.
+
+The synthetic voices have never heard your accent or how you actually say the phrase in passing; good recordings teach the model exactly that. Play a round back before using it: if the clips sound distorted compared with Windows' own Voice Recorder, train with synthetic voices only (the default) instead — bad recordings hurt more than they help.
 
 ### 2. Record your room (recommended)
 
@@ -450,9 +455,9 @@ Records 20 minutes of your room's usual sound in 10-second clips — leave on th
 
 **On Colab:** go to [colab.research.google.com](https://colab.research.google.com), **File → Upload notebook**, pick `wakeword/wakeword_training.ipynb`, then **Runtime → Change runtime type → T4 GPU** (not a TPU). Run the cells top to bottom:
 
-- **Cell 1:** settings. The defaults are the ones that worked: phrase `hey nexus`, 50,000 examples, penalty 1000, and each of your recordings used 40 times. Leave `save_to_drive` on: it keeps a checkpoint in your Google Drive, so a disconnect or Colab's session time limit doesn't cost you the hours of clip generation.
+- **Cell 1:** settings. The defaults are the ones that worked: phrase `hey nexus`, 50,000 examples, penalty 1000, synthetic voices only. To add your recordings, set `my_voice_copies` to 40. Leave `save_to_drive` on: it keeps a checkpoint in your Google Drive, so a disconnect or Colab's session time limit doesn't cost you the hours of clip generation.
 - **Cells 2–4:** setup and about 16 GB of downloads. Each checks itself and stops with a clear message if something went wrong; re-running resumes.
-- **Cell 5** asks for `my_voice.zip`, then `my_room_noise.zip`.
+- **Cell 5** asks for `my_room_noise.zip` (and `my_voice.zip` first, if `my_voice_copies` is above 0).
 - **Cell 7:** listen to the synthetic voices. If they don't say it like you, change the spelling in cell 1.
 - **Cell 8** trains, with all output visible.
 - **Cell 9** downloads `hey_nexus.onnx`.

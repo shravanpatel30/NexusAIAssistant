@@ -1,7 +1,7 @@
 """Helpers for the wake word ("Hey Nexus"). Run from the project folder:
 
     python wakeword_tools.py setup      one-time: download openWakeWord's base models
-    python wakeword_tools.py myvoice    record ~60 clips of you saying the wake phrase, for training
+    python wakeword_tools.py myvoice    record ~75 clips of you saying the wake phrase, for training
     python wakeword_tools.py noise 20   record 20 min of your room's usual sounds for training
     python wakeword_tools.py test       live meter: see the score as you talk, to tune THRESHOLD
     python wakeword_tools.py verifier   optional: teach the wake word your voice
@@ -103,77 +103,180 @@ def test():
 
 
 # ---------------------------------------------------------------- myvoice
-VOICE_ROUNDS = [                      # (how to say it, how many times)
-    ("normally, the way you usually would", 15),
-    ("quickly, like you're in a hurry", 10),
-    ("slowly and clearly", 8),
-    ("quietly, almost under your breath", 8),
-    ("from farther away: step back a few feet or turn away from the mic", 10),
-    ("casually, mid-task, as if you're busy with something else", 9),
+# Two parts: your usual mic (earphones), then the laptop's built-in mic.
+VOICE_PARTS = [
+    ("your usual microphone (earphones)", [
+        ("normally, the way you usually would", 15),
+        ("quickly, like you're in a hurry", 10),
+        ("slowly and clearly", 8),
+        ("quietly, almost under your breath", 8),
+        ("casually, mid-task, as if you're busy with something else", 9),
+    ]),
+    ("the laptop's built-in microphone (unplug the earphones now)", [
+        ("normally, sitting at the laptop", 10),
+        ("from 3-6 feet away (step back from the laptop)", 10),
+        ("from across the room, a bit louder", 5),
+    ]),
 ]
+REC_RATE = 48000              # record at the mic's usual rate, then convert properly to 16 kHz
+BLOCK = REC_RATE * 80 // 1000 # 80 ms
 
 
-def _beep():
+def _refresh_devices():
+    """PortAudio remembers the devices from when it started; reload the list
+    so a mic plugged in or out since then is seen correctly."""
     import sounddevice as sd
-    t = np.arange(int(0.08 * 22050)) / 22050
-    sd.play((0.2 * np.sin(2 * np.pi * 990 * t) * np.minimum(1, np.minimum(t, t[::-1]) / 0.01)).astype(np.float32), 22050)
-    sd.wait()
-    time.sleep(0.1)                   # so the beep itself isn't recorded
+    try:
+        sd._terminate()
+        sd._initialize()
+    except Exception:
+        pass
 
 
-def _trim(audio):
-    """Cut the silence around the phrase. Training lines every clip up so the
-    phrase ends at the end of a ~2 s window, so the end is trimmed tight."""
+def _pick_mic():
+    """Show the input devices; Enter keeps Windows' default. Returns a device or None."""
+    import sounddevice as sd
+    _refresh_devices()
+    try:
+        default = sd.query_devices(kind="input")["name"]
+    except Exception:
+        default = "(none found)"
+    print(f"  Microphone: {default}")
+    choice = input("  Enter to use it, or L to list other microphones: ").strip().lower()
+    if choice != "l":
+        return None
+    mics = [(i, d) for i, d in enumerate(sd.query_devices())
+            if d["max_input_channels"] > 0 and sd.query_hostapis(d["hostapi"])["name"] == "MME"]
+    for n, (i, d) in enumerate(mics):
+        print(f"    {n}: {d['name']}")
+    pick = input("  Number (Enter = default): ").strip()
+    return mics[int(pick)][0] if pick.isdigit() and int(pick) < len(mics) else None
+
+
+def _clean_clip(raw48):
+    """48 kHz recording of one phrase → tidy 16 kHz clip: proper resampling,
+    trimmed to the speech (keeping quiet sounds like a final "s"), short fades."""
+    from scipy.signal import resample_poly
+    clip = resample_poly(raw48.astype(np.float32), 1, 3)
     win = SAMPLE_RATE // 100                                   # 10 ms
-    n = len(audio) // win
-    rms = np.sqrt(np.mean(audio[:n * win].astype(np.float32).reshape(n, win) ** 2, axis=1))
+    n = len(clip) // win
+    if n < 10:
+        return clip[:0].astype(np.int16)
+    rms = np.sqrt(np.mean(clip[:n * win].reshape(n, win) ** 2, axis=1)) + 1e-3
     floor = np.percentile(rms, 10)
-    loud = np.where(rms > max(rms.max() * 0.08, floor * 3))[0]
-    if len(loud) == 0:
-        return audio[:0]
-    start = max(0, (loud[0] - 10) * win)                       # keep 100 ms before
-    end = min(len(audio), (loud[-1] + 5) * win)                # and 50 ms after
-    return audio[start:end]
+    sound = np.where(rms > max(floor * 4, rms.max() * 0.01))[0]  # relative to the background, not the peak
+    if len(sound) == 0:
+        return clip[:0].astype(np.int16)
+    start = max(0, (sound[0] - 12) * win)                      # keep 120 ms before
+    end = min(len(clip), (sound[-1] + 10) * win)               # and 100 ms after
+    clip = clip[start:end]
+    fade = min(len(clip) // 4, SAMPLE_RATE // 100)
+    ramp = np.linspace(0, 1, fade)
+    clip[:fade] *= ramp
+    clip[-fade:] *= ramp[::-1]
+    return np.clip(clip, -32768, 32767).astype(np.int16)
+
+
+def _record_round(count, device, vad):
+    """Keep the mic open (like a normal recorder — headset mics need a moment
+    to settle) and cut out each phrase as you say it. Returns the clips."""
+    import queue as _queue
+    import sounddevice as sd
+    from scipy.signal import resample_poly
+    blocks = _queue.Queue()
+    clips, rejected = [], 0
+    pre = 4                                                    # blocks kept from before speech starts
+    with sd.InputStream(samplerate=REC_RATE, channels=1, dtype="int16", blocksize=BLOCK,
+                        device=device, callback=lambda d, f, t, s: blocks.put(d[:, 0].copy())):
+        time.sleep(0.5)                                        # let the mic settle
+        while not blocks.empty():
+            blocks.get()
+        history, utterance, quiet, idle, skipping = [], None, 0, 0, False
+        print(f"  ▶ Say it now  0/{count}", end="", flush=True)
+        while len(clips) < count:
+            block = blocks.get()
+            speech = vad.predict(resample_poly(block.astype(np.float32), 1, 3).astype(np.int16),
+                                 frame_size=640) > 0.5
+            if skipping:                                       # rest of something too long:
+                quiet = 0 if speech else quiet + 1             # wait for a pause
+                skipping = quiet < 6
+                continue
+            if utterance is None:
+                history = (history + [block])[-pre:]
+                if speech:
+                    utterance, quiet = list(history), 0
+                else:
+                    idle += 1
+                    if idle == 125:                            # 10 s of nothing
+                        print(f"\r  ▶ Still listening — say it now  {len(clips)}/{count}   ", end="", flush=True)
+                continue
+            utterance.append(block)
+            quiet = 0 if speech else quiet + 1
+            if quiet < 6 and len(utterance) < 40:              # until 0.5 s of quiet (max ~3 s)
+                continue
+            too_long = len(utterance) >= 40
+            clip = _clean_clip(np.concatenate(utterance))
+            utterance, history, idle = None, [], 0
+            secs = len(clip) / SAMPLE_RATE - 0.22                  # the speech itself, without the margins
+            if too_long or not 0.45 <= secs <= 2.0:
+                rejected += 1
+                skipping, quiet = too_long, 0
+                hint = "too short — say the whole phrase" if secs < 0.45 and not too_long else "too long — just the phrase, then pause"
+                print(f"\r  ({hint})  ▶ again  {len(clips)}/{count}      ", end="", flush=True)
+                continue
+            clips.append(clip)
+            print(f"\r  ▶ Say it now  {len(clips)}/{count}" + " " * 30, end="", flush=True)
+    print()
+    return clips
 
 
 def myvoice():
-    """Record you saying the wake phrase ~60 times, in different ways. The
-    training notebook mixes these in with its synthetic voices, so the model
-    learns how *you* actually say it — the biggest single fix for misses."""
+    """Record you saying the wake phrase ~75 times, in different ways and with
+    two microphones. The training notebook mixes these in with its synthetic
+    voices, so the model learns how *you* actually say it — the biggest
+    single fix for missed wake-ups."""
+    import sounddevice as sd
     from openwakeword.vad import VAD
     vad = VAD()
     VOICE_DIR.mkdir(parents=True, exist_ok=True)
     n = len(list(VOICE_DIR.glob("*.wav")))
-    total = sum(k for _, k in VOICE_ROUNDS)
-    print(f"Recording \"{WAKE_PHRASE}\" {total} times in {len(VOICE_ROUNDS)} rounds. "
-          f"Say it once after each beep. Use the mic you'll normally use.")
+    total = sum(k for _, rounds in VOICE_PARTS for _, k in rounds)
+    print(f"Recording \"{WAKE_PHRASE}\" about {total} times. Say it whenever you see ▶, "
+          f"with a short pause after each one — no need to wait for a cue.")
     if n:
         print(f"({n} clips already in {VOICE_DIR}; new ones are added. Delete the folder to start over.)")
     try:
-        for r, (how, count) in enumerate(VOICE_ROUNDS, 1):
-            input(f"\nRound {r}/{len(VOICE_ROUNDS)}: say it {how}. Press Enter to start...")
-            done = 0
-            while done < count:
-                _beep()
-                audio = _record(2.2)
-                clip = _trim(audio)
+        for p, (mic, rounds) in enumerate(VOICE_PARTS, 1):
+            print(f"\n=== Part {p}/{len(VOICE_PARTS)}: {mic} ===")
+            if p > 1:
+                input("  Switch microphones now, then press Enter...")
+            device = _pick_mic()
+            for r, (how, count) in enumerate(rounds, 1):
+                input(f"\nRound {r}/{len(rounds)}: say it {how}, {count} times. Press Enter to start...")
                 vad.reset_states()
-                speech = max((vad.predict(clip[i:i + 1280], frame_size=640)
-                              for i in range(0, len(clip) - 1280, 1280)), default=0)
-                if not 0.35 <= len(clip) / SAMPLE_RATE <= 1.9 or speech < 0.5:
-                    print("    (didn't catch that — once more)")
-                    continue
-                _save_wav(VOICE_DIR / f"voice_{n:04d}.wav", clip)
-                n, done = n + 1, done + 1
-                print(f"\r  {done}/{count}", end="", flush=True)
-            print()
+                clips = _record_round(count, device, vad)
+                first = n
+                for clip in clips:
+                    _save_wav(VOICE_DIR / f"voice_{n:04d}.wav", clip)
+                    n += 1
+                if input("  Saved. Press Enter for the next round, or P to play this round back: ").strip().lower() == "p":
+                    for clip in clips:
+                        sd.play(clip.astype(np.float32) / 32768, SAMPLE_RATE)
+                        sd.wait()
+                        time.sleep(0.25)
+                    if input("  Keep this round? (Enter = yes, N = record it again): ").strip().lower() == "n":
+                        for i in range(first, n):
+                            (VOICE_DIR / f"voice_{i:04d}.wav").unlink(missing_ok=True)
+                        n = first
+                        print("  Removed — run myvoice again at the end to top up.")
     except KeyboardInterrupt:
         print("\nStopped early — the clips so far are kept.")
     zip_path = wakeword.WAKE_DIR / "my_voice.zip"
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         for wav in sorted(VOICE_DIR.glob("*.wav")):
             z.write(wav, wav.name)
-    print(f"\n{n} clips → {zip_path}\nGive that zip to the training notebook (cell 5).")
+    print(f"\n{len(list(VOICE_DIR.glob('*.wav')))} clips → {zip_path}\n"
+          f"Listen to a few in {VOICE_DIR} first; then give the zip to the training notebook (cell 5).")
 
 
 # ---------------------------------------------------------------- noise
