@@ -715,6 +715,18 @@ Small vision models misread some images, especially diagrams. Try a sharper or t
 
 Images take about 1,000 tokens of the model's context window. Raise `OLLAMA_CONTEXT_LENGTH` to `8192` as described above, and make sure the **Images** model is an `-instruct` one, not a thinking one.
 
+### Commands take a few seconds
+
+Every command that isn't instant (arithmetic, calculus, and "open/close <app>" for installed apps are) is first sorted by the AI router. The log shows where its time went, for example:
+
+```
+[ROUTER] qwen3:8b routed in 4200ms (load 3.1s, read 1850 tokens 0.9s, wrote 9 tokens 0.1s)
+```
+
+- **`load` of several seconds:** the model wasn't in the GPU yet, so Ollama loaded it. Nexus never loads it ahead of time, so the GPU stays free for other things until you ask something. How long Ollama keeps it loaded after a request is Ollama's own setting: the `OLLAMA_KEEP_ALIVE` environment variable (default 5 minutes; for example `30m`).
+- **`read` of about a second:** the router's instructions plus your list of installed apps. Fewer apps in `apps.json` means a shorter prompt.
+- **`wrote`:** usually a fraction of a second.
+
 ### LLM responses are very slow
 
 First call after Nexus sits idle is slow because the model has to load into VRAM. Subsequent calls are fast. Set `OLLAMA_KEEP_ALIVE=2h` in your environment to keep it loaded longer.

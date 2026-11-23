@@ -324,6 +324,17 @@ VALID_INTENTS = {
 }
 
 
+def _timing_breakdown(data):
+    """Where an Ollama request's time went, e.g. "load 3.1s, read 1200 tokens 0.6s, wrote 18 tokens 0.3s"."""
+    sec = lambda key: data.get(key, 0) / 1e9
+    parts = []
+    if sec("load_duration") > 0.1:
+        parts.append(f"load {sec('load_duration'):.1f}s")
+    parts.append(f"read {data.get('prompt_eval_count', 0)} tokens {sec('prompt_eval_duration'):.1f}s")
+    parts.append(f"wrote {data.get('eval_count', 0)} tokens {sec('eval_duration'):.1f}s")
+    return ", ".join(parts)
+
+
 def classify_intent(user_text):
     system = ROUTER_SYSTEM_PROMPT.replace(
         "%APP_LIST%", "\n".join(f"- {n}" for n in APP_NAMES)
@@ -346,8 +357,10 @@ def classify_intent(user_text):
             timeout=60,
         )
         elapsed = time.perf_counter() - t_start
-        content = r.json()["message"]["content"]
-        print(f"[DEBUG] {models.main_model()} routed in {elapsed*1000:.0f}ms → {content}")
+        data = r.json()
+        content = data["message"]["content"]
+        print(f"[ROUTER] {models.main_model()} routed in {elapsed*1000:.0f}ms "
+              f"({_timing_breakdown(data)}) → {content}")
 
         parsed = json.loads(content)
         if parsed.get("intent") not in VALID_INTENTS:
@@ -902,6 +915,44 @@ INTENT_HANDLERS = {
 }
 
 
+_APP_COMMAND_RE = re.compile(
+    r"^\s*(?:please\s+)?(open|launch|start|run|close|quit|exit|kill)\s+"
+    r"(?:the\s+|my\s+)?(.+?)(?:\s+app)?\s*(?:please)?[\s.!?]*$", re.IGNORECASE)
+
+
+def _match_app(spoken):
+    """Installed app for a spoken/typed name, or None if not a confident match."""
+    norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+    target = norm(spoken)
+    if not target:
+        return None
+    for name in APP_NAMES:
+        if norm(name) == target:
+            return name
+    import difflib
+    close = difflib.get_close_matches(target, {norm(n): n for n in APP_NAMES}, n=1, cutoff=0.85)
+    return {norm(n): n for n in APP_NAMES}[close[0]] if close else None
+
+
+def quick_app_command(user_text):
+    """Open/close an app without the router (instant) when the message is just
+    "open <app>" and <app> clearly matches an installed app. Anything else —
+    a URL, a PDF, an unknown name, a longer request — returns None and goes
+    through the router as usual."""
+    m = _APP_COMMAND_RE.match(user_text)
+    if not m:
+        return None
+    app = _match_app(m.group(2))
+    if app is None:
+        return None
+    closing = m.group(1).lower() in ("close", "quit", "exit", "kill")
+    ok, msg = close_app(app) if closing else open_app(app)
+    print(f"[ROUTER] instant: {'close' if closing else 'open'} {app}", flush=True)
+    reply = Reply(msg)
+    reply.intent = "close_app" if closing else "open_app"
+    return reply
+
+
 def dispatch(user_text, stream=False, images=None, on_status=None):
     """Do whatever the message asks and return a Reply.
     stream=True prints chat replies to the terminal as they're generated.
@@ -930,7 +981,12 @@ def dispatch(user_text, stream=False, images=None, on_status=None):
             return Reply(error)
         return Reply(body, kind="assistant", speak="Done. The result is on screen.")
 
-    # 3. Everything else goes through the router
+    # 3. "open spotify" / "close discord" — instant when the name matches an installed app
+    reply = quick_app_command(user_text)
+    if reply is not None:
+        return reply
+
+    # 4. Everything else goes through the router
     parsed = classify_intent(user_text)
     intent = parsed.get("intent", "chat")
     handler = INTENT_HANDLERS.get(intent)
@@ -1116,7 +1172,6 @@ def voice_mode():
     The wake word works too, if it is on."""
     global _wake_handler
     reminders.start()
-    voice.preload()
     recorder = voice.Recorder()
     print(f"\nVoice mode: hold {VOICE_HOTKEY.upper()} to talk. Release to send.")
     print("Say 'voice off' to disable speech output.\n")
@@ -1135,6 +1190,8 @@ def voice_mode():
     status = start_wake_word(on_wake=lambda: print("🎙  listening...", end="", flush=True))
     if status:
         print(status + "\n")
+    # Speech models load in the background; a command that comes first waits for them
+    threading.Thread(target=voice.preload, daemon=True).start()
 
     is_recording = False
     while not quit_requested.is_set():
@@ -1340,13 +1397,21 @@ def tray_mode():
 
     _wake_handler = on_wake_text
 
-    # Load the voice models and start the wake word in the background, so
-    # the window appears right away
+    # Background startup, so the window appears right away:
+    #  - the wake word first (it's light), so the mic is live within seconds;
+    #  - then the speech models (Whisper/Piper), which can take minutes right
+    #    after login while Windows is busy — the first command waits for them
+    #    only if it comes before they're ready.
+    # The AI model is NOT preloaded: Ollama loads it on the first request.
+    t0 = time.perf_counter()
+
     def start_voice():
-        voice.preload()
         status = start_wake_word(on_wake=lambda: bridge.system_message.emit("🎙 Listening..."))
+        print(f"[STARTUP] wake word ready after {time.perf_counter() - t0:.1f}s", flush=True)
         if status and ("unavailable" in status or "placeholder" in status):
             bridge.system_message.emit(status)
+        voice.preload()
+        print(f"[STARTUP] speech models loaded after {time.perf_counter() - t0:.1f}s", flush=True)
     threading.Thread(target=start_voice, daemon=True).start()
 
     qt_app.exec()          # blocks until quit
