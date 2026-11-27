@@ -2,6 +2,7 @@
 //
 // Python talks to this page through two functions:
 //   addMessage(role, text, reasoning, images)   role = "user" | "assistant" | "system"
+//   startStream(), updateStream(textSoFar), finishStream(text, reasoning)
 //   clearMessages()
 (function () {
   const root = typeof window !== "undefined" ? window : globalThis;
@@ -180,9 +181,56 @@
     requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight));
   };
 
+  // ---------- Streaming answers ----------
+  // Python calls startStream(), then updateStream(textSoFar) as the answer is
+  // written, then finishStream(finalText, reasoning).
+  let live = null;                               // { wrap, body, snippetBase }
+
+  function nearBottom() {
+    return window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
+  }
+
+  root.startStream = function () {
+    const wrap = document.createElement("div");
+    wrap.className = "msg assistant streaming";
+    const label = document.createElement("span");
+    label.className = "role";
+    label.textContent = LABELS.assistant;
+    const body = document.createElement("div");
+    body.className = "body";
+    wrap.append(label, body);
+    document.getElementById("messages").appendChild(wrap);
+    live = { wrap, body, snippetBase: snippets.length };
+    window.scrollTo(0, document.body.scrollHeight);
+  };
+
+  root.updateStream = function (text) {
+    if (!live) root.startStream();
+    // Hold back an equation that has started but not finished ($$ ... not yet
+    // closed), so raw LaTeX doesn't flash on screen before it renders
+    const opens = (text.match(/(?<!\\)\$\$/g) || []).length;
+    if (opens % 2 === 1) text = text.slice(0, text.lastIndexOf("$$"));
+    const follow = nearBottom();                 // don't yank the view if you've scrolled up
+    snippets.length = live.snippetBase;          // code blocks are re-numbered on each redraw
+    live.body.innerHTML = renderMarkdown(text);
+    if (follow) window.scrollTo(0, document.body.scrollHeight);
+  };
+
+  root.finishStream = function (text, reasoning) {
+    if (!live) { root.addMessage("assistant", text, reasoning); return; }
+    const follow = nearBottom();
+    snippets.length = live.snippetBase;
+    live.body.innerHTML = renderMarkdown(text);
+    if (reasoning) live.wrap.insertBefore(collapsible(reasoning, "reasoning"), live.body);
+    live.wrap.classList.remove("streaming");
+    live = null;
+    if (follow) requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight));
+  };
+
   root.clearMessages = function () {
     document.getElementById("messages").innerHTML = "";
     snippets.length = 0;
+    live = null;
   };
 
   // ---------- Copy as LaTeX ----------

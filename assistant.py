@@ -438,7 +438,7 @@ def _strip_leading_junk(reply):
     return re.sub(r'^[\s\'",+\-•·\u0080-￿]{1,10}(?=[A-Z])', '', reply).strip()
 
 
-def chat(message, stream=False, images=None):
+def chat(message, stream=False, images=None, on_delta=None):
     """Ask the model a chat, PDF or image question.
 
     This is the ONLY call that follows the thinking-mode toggle; the router,
@@ -447,14 +447,16 @@ def chat(message, stream=False, images=None):
     images: base64 images attached to this message. They go to image_model(),
     which unloads right after if it isn't the main model, to free VRAM.
     With stream=True the answer is printed to the terminal as it arrives
-    (text and voice modes). Returns (answer, reasoning) — reasoning is ""
-    when thinking mode is off."""
+    (text and voice modes). on_delta(kind, text_so_far) receives it as it
+    arrives instead (the window): kind is "reasoning" or "answer".
+    Returns (answer, reasoning) — reasoning is "" when thinking mode is off."""
     model = image_model() if images else models.main_model()
     thinking = THINKING and models.can_think(model)
+    live = stream or on_delta is not None
     payload = {
         "model": model,
         "messages": _build_chat_messages(message, images),
-        "stream": stream,
+        "stream": live,
         "think": thinking,
     }
     if not models.same_model(model, models.main_model()):
@@ -462,23 +464,32 @@ def chat(message, stream=False, images=None):
     # Reasoning can run for a minute or more before the answer starts
     timeout = 600 if thinking else 120
 
-    if stream:
+    if live:
         answer, reasoning = "", ""
         with requests.post(OLLAMA_URL, json=payload, stream=True, timeout=timeout) as r:
             for line in r.iter_lines():
                 if not line:
                     continue
                 chunk = json.loads(line)
+                if "error" in chunk:
+                    raise RuntimeError(f"{model}: {chunk['error']}")
                 msg = chunk.get("message", {})
                 if msg.get("thinking"):
-                    if not reasoning:
+                    if not reasoning and stream:
                         print("✦ reasoning...", flush=True)
                     reasoning += msg["thinking"]
+                    if on_delta:
+                        on_delta("reasoning", reasoning)
                 piece = msg.get("content", "")
-                print(piece, end="", flush=True)
-                answer += piece
+                if piece:
+                    if stream:
+                        print(piece, end="", flush=True)
+                    answer += piece
+                    if on_delta:
+                        on_delta("answer", answer)
                 if chunk.get("done"):
-                    print()
+                    if stream:
+                        print()
                     break
     else:
         data = requests.post(OLLAMA_URL, json=payload, timeout=timeout).json()
@@ -534,7 +545,7 @@ def image_model():
     return main if models.can_see(main) else models.vision_model()
 
 
-def answer_about_images(question, image_paths, stream=False, on_status=None):
+def answer_about_images(question, image_paths, stream=False, on_status=None, on_delta=None):
     """Answer a question about attached images. Returns a Reply.
 
     The image and question go straight to a model that can see (see
@@ -547,7 +558,8 @@ def answer_about_images(question, image_paths, stream=False, on_status=None):
     if on_status:
         on_status(f"{APP_NAME} is looking ({model})")
     question = question.strip() or DEFAULT_IMAGE_QUESTION
-    answer, reasoning = chat(question, stream=stream, images=[_b64(p) for p in image_paths])
+    answer, reasoning = chat(question, stream=stream, images=[_b64(p) for p in image_paths],
+                             on_delta=on_delta)
     return Reply(answer, kind="assistant", streamed=stream, reasoning=reasoning)
 
 
@@ -953,18 +965,19 @@ def quick_app_command(user_text):
     return reply
 
 
-def dispatch(user_text, stream=False, images=None, on_status=None):
+def dispatch(user_text, stream=False, images=None, on_status=None, on_delta=None):
     """Do whatever the message asks and return a Reply.
     stream=True prints chat replies to the terminal as they're generated.
     images: image file paths attached in the window (pasted or dropped).
-    on_status: callback for status-line text during slow steps."""
+    on_status: callback for status-line text during slow steps.
+    on_delta: see chat() — the window streams answers with it."""
     symbolic_math.CHAT_MODEL = models.main_model()   # its word → math translation
 
     # 0. Images — attached in the window, or a path typed in the message
     found, rest = extract_image_paths(user_text)
     if images or found:
         reply = answer_about_images(rest if found else user_text,
-                                    list(images or []) + found, stream, on_status)
+                                    list(images or []) + found, stream, on_status, on_delta)
         reply.intent = "image"
         return reply
 
@@ -994,7 +1007,7 @@ def dispatch(user_text, stream=False, images=None, on_status=None):
         reply = handler(parsed, user_text)
     else:
         # Always send the user's own words — never the router's paraphrase
-        answer, reasoning = chat(user_text, stream=stream)
+        answer, reasoning = chat(user_text, stream=stream, on_delta=on_delta)
         reply = Reply(answer, kind="assistant", streamed=stream, reasoning=reasoning)
     reply.intent = intent
     return reply
@@ -1238,15 +1251,38 @@ def handle_window(user_text, images=None):
             bridge.thinking_mode_changed.emit(THINKING)   # keep the Think button in sync
         return
 
+    # The answer streams into the window as it's written
+    live = {"started": False, "last": 0.0, "text": ""}
+
+    def on_delta(kind, text):
+        if kind != "answer":
+            return                         # reasoning: the status line says "reasoning..."
+        live["text"] = text
+        if not live["started"]:
+            live["started"] = True
+            bridge.thinking_stopped.emit()
+            bridge.stream_started.emit()
+        now = time.monotonic()
+        if now - live["last"] >= 0.05:     # at most 20 updates a second
+            live["last"] = now
+            bridge.stream_text.emit(text)
+
     bridge.thinking_started.emit()
     try:
-        reply = dispatch(user_text, images=images, on_status=bridge.busy_text.emit)
+        reply = dispatch(user_text, images=images, on_status=bridge.busy_text.emit, on_delta=on_delta)
     except Exception as e:
         reply = _error_reply(e)
     finally:
-        bridge.thinking_stopped.emit()
+        if not live["started"]:
+            bridge.thinking_stopped.emit()
 
-    if reply.text:
+    if live["started"]:
+        if reply.kind == "assistant":
+            bridge.stream_finished.emit(reply.text, reply.reasoning)
+        else:                              # failed part-way through the answer
+            bridge.stream_finished.emit(live["text"] + "\n\n*(cut off)*", "")
+            bridge.system_message.emit(reply.text)
+    elif reply.text:
         if reply.kind == "assistant":
             bridge.assistant_said.emit(reply.text, reply.reasoning)
         else:

@@ -397,6 +397,7 @@ Exact answers that aren't plain fractions also show a decimal value, e.g. `integ
 
 In tray mode, left-click the tray icon to open the chat window. Features:
 
+- Answers appear as they're written, so you can start reading after about a second instead of waiting for the whole reply (with thinking mode on, the status line says "reasoning…" until the answer itself starts)
 - Replies render markdown — headings, lists, tables, bold, links
 - Math renders properly with KaTeX, both inline (`$...$`, `\(...\)`) and on its own line (`$$...$$`, `\[...\]`)
 - Code blocks have a header bar with a Copy button — click to copy the code to clipboard

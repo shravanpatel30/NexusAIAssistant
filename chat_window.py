@@ -56,6 +56,9 @@ def _load_ui_font():
 class ChatBridge(QObject):
     user_said = Signal(str, list)            # text, image file paths
     assistant_said = Signal(str, str)        # answer, reasoning ("" unless thinking mode)
+    stream_started = Signal()                # an answer begins streaming in
+    stream_text = Signal(str)                # the answer so far
+    stream_finished = Signal(str, str)       # final answer, reasoning
     busy_text = Signal(str)                  # status text during slow steps ("Nexus is looking")
     system_message = Signal(str)
     show_window_requested = Signal()
@@ -501,6 +504,9 @@ class ChatWindow(QMainWindow):
         # --- Bridge signals ---
         bridge.user_said.connect(self._append_user)
         bridge.assistant_said.connect(self._append_assistant)
+        bridge.stream_started.connect(lambda: self._run_js("startStream();"))
+        bridge.stream_text.connect(lambda t: self._run_js(f"updateStream({json.dumps(t)});"))
+        bridge.stream_finished.connect(self._finish_stream)
         bridge.system_message.connect(self._append_system)
         bridge.thinking_started.connect(self.throbber.start)
         bridge.thinking_stopped.connect(self.throbber.stop)
@@ -598,6 +604,10 @@ class ChatWindow(QMainWindow):
 
     def _append_assistant(self, text, reasoning=""):
         self._add_message("assistant", text, reasoning)
+        self._save_to_disk("assistant", text, reasoning)
+
+    def _finish_stream(self, text, reasoning=""):
+        self._run_js(f"finishStream({json.dumps(text)}, {json.dumps(reasoning)});")
         self._save_to_disk("assistant", text, reasoning)
 
     def _sync_think_button(self, on):
